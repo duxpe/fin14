@@ -1,0 +1,16 @@
+{
+  "name": "@fin14/core",
+  "version": "0.1.0",
+  "description": "fin14 measurement engine",
+  "type": "module",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/duxpe/fin14.git" },
+  "engines": { "node": ">=22.0.0" },
+  "exports": { ".": "./src/index.js" },
+  "files": ["src", "README.md", "LICENSE"],
+  "dependencies": {
+    "parse5": "^8.0.1",
+    "css-tree": "^3.2.1",
+    "smol-toml": "^1.6.1"
+  }
+}

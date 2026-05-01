@@ -1,0 +1,15 @@
+{
+  "name": "fin14",
+  "version": "0.1.0",
+  "description": "Budget CLI for static sites — validates page weight against the 14 kB limit",
+  "type": "module",
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/duxpe/fin14.git" },
+  "engines": { "node": ">=22.0.0" },
+  "bin": { "fin14": "./bin/fin14.js" },
+  "files": ["bin", "commands", "dev-server", "README.md", "LICENSE"],
+  "dependencies": {
+    "@fin14/core": "^0.1.0",
+    "chokidar": "^5.0.0"
+  }
+}
