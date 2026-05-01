@@ -1,0 +1,250 @@
+import { describe, it, after } from 'node:test'
+import { strict as assert } from 'node:assert'
+import { mkdtemp, writeFile, rm } from 'node:fs/promises'
+import { join } from 'node:path'
+import { tmpdir } from 'node:os'
+import { loadConfig } from '../src/index.js'
+
+// ── E2E ──────────────────────────────────────────────────────────────────────
+
+describe('e2e: load full fin14.toml', () => {
+  let dir
+
+  it('loads all sections and merges with defaults', async () => {
+    dir = await mkdtemp(join(tmpdir(), 'fin14-e2e-'))
+    const toml = `
+[project]
+output_dir = "dist"
+build_command = "npm run build"
+
+[budget]
+default = "16kb"
+compression = "brotli"
+compression_level = 5
+
+[network]
+timeout_ms = 8000
+max_redirects = 3
+
+[viewport]
+default = "desktop"
+`
+    await writeFile(join(dir, 'fin14.toml'), toml)
+    const config = await loadConfig({ config: join(dir, 'fin14.toml') })
+
+    assert.equal(config.project.output_dir, 'dist')
+    assert.equal(config.project.build_command, 'npm run build')
+    assert.equal(config.budget.default, 16000)
+    assert.equal(config.budget.compression, 'brotli')
+    assert.equal(config.budget.compression_level, 5)
+    assert.equal(config.network.timeout_ms, 8000)
+    assert.equal(config.network.max_redirects, 3)
+    assert.equal(config.viewport.default, 'desktop')
+    // defaults still present for untouched viewport presets
+    assert.equal(config.viewport.mobile.width, 390)
+    assert.equal(config.viewport.desktop.width, 1366)
+  })
+
+  after(async () => { if (dir) await rm(dir, { recursive: true, force: true }) })
+})
+
+describe('e2e: empty config uses all defaults', () => {
+  let dir
+
+  it('all defaults intact when toml has no sections', async () => {
+    dir = await mkdtemp(join(tmpdir(), 'fin14-defaults-'))
+    await writeFile(join(dir, 'fin14.toml'), '')
+    const config = await loadConfig({ config: join(dir, 'fin14.toml') })
+
+    assert.equal(config.project.output_dir, null)
+    assert.equal(config.project.build_command, null)
+    assert.equal(config.budget.default, 14000)
+    assert.equal(config.budget.compression, 'gzip')
+    assert.equal(config.budget.compression_level, 6)
+    assert.equal(config.network.timeout_ms, 5000)
+    assert.equal(config.network.max_redirects, 5)
+    assert.equal(config.viewport.default, 'mobile')
+    assert.equal(config.viewport.mobile.width, 390)
+    assert.equal(config.viewport.mobile.height, 844)
+    assert.equal(config.viewport.desktop.width, 1366)
+    assert.equal(config.viewport.desktop.height, 768)
+  })
+
+  after(async () => { if (dir) await rm(dir, { recursive: true, force: true }) })
+})
+
+// ── budget.default parsing ────────────────────────────────────────────────────
+
+describe('budget.default parsing', () => {
+  let dir
+
+  async function budgetToml(value) {
+    const toml = typeof value === 'string'
+      ? `[budget]\ndefault = "${value}"\n`
+      : `[budget]\ndefault = ${value}\n`
+    const file = join(dir, 'fin14.toml')
+    await writeFile(file, toml)
+    return loadConfig({ config: file })
+  }
+
+  it('setup', async () => { dir = await mkdtemp(join(tmpdir(), 'fin14-budget-')) })
+
+  it('"14kb" → 14000', async () => {
+    const config = await budgetToml('14kb')
+    assert.equal(config.budget.default, 14000)
+  })
+
+  it('"14.5KB" → 14500', async () => {
+    const config = await budgetToml('14.5KB')
+    assert.equal(config.budget.default, 14500)
+  })
+
+  it('integer 16000 → 16000', async () => {
+    const config = await budgetToml(16000)
+    assert.equal(config.budget.default, 16000)
+  })
+
+  it('float 14.1 → error', async () => {
+    await assert.rejects(() => budgetToml(14.1), /expected integer/)
+  })
+
+  it('invalid string "big" → error', async () => {
+    await assert.rejects(() => budgetToml('big'), /invalid value/)
+  })
+
+  after(async () => { if (dir) await rm(dir, { recursive: true, force: true }) })
+})
+
+// ── SSG auto-detection ────────────────────────────────────────────────────────
+
+describe('SSG auto-detection', () => {
+  let dir
+  const originalCwd = process.cwd()
+
+  it('setup', async () => {
+    dir = await mkdtemp(join(tmpdir(), 'fin14-ssg-'))
+  })
+
+  it('astro.config.ts → "dist"', async () => {
+    const ssgDir = await mkdtemp(join(tmpdir(), 'fin14-ssg-astro-'))
+    await writeFile(join(ssgDir, 'astro.config.ts'), '')
+    process.chdir(ssgDir)
+    try {
+      const config = await loadConfig({})
+      assert.equal(config.project.output_dir, 'dist')
+    } finally {
+      process.chdir(originalCwd)
+      await rm(ssgDir, { recursive: true, force: true })
+    }
+  })
+
+  it('hugo.toml → "public"', async () => {
+    const ssgDir = await mkdtemp(join(tmpdir(), 'fin14-ssg-hugo-'))
+    await writeFile(join(ssgDir, 'hugo.toml'), '')
+    process.chdir(ssgDir)
+    try {
+      const config = await loadConfig({})
+      assert.equal(config.project.output_dir, 'public')
+    } finally {
+      process.chdir(originalCwd)
+      await rm(ssgDir, { recursive: true, force: true })
+    }
+  })
+
+  it('_config.yml → "_site"', async () => {
+    const ssgDir = await mkdtemp(join(tmpdir(), 'fin14-ssg-jekyll-'))
+    await writeFile(join(ssgDir, '_config.yml'), '')
+    process.chdir(ssgDir)
+    try {
+      const config = await loadConfig({})
+      assert.equal(config.project.output_dir, '_site')
+    } finally {
+      process.chdir(originalCwd)
+      await rm(ssgDir, { recursive: true, force: true })
+    }
+  })
+
+  it('no SSG files → null', async () => {
+    const ssgDir = await mkdtemp(join(tmpdir(), 'fin14-ssg-empty-'))
+    process.chdir(ssgDir)
+    try {
+      const config = await loadConfig({})
+      assert.equal(config.project.output_dir, null)
+    } finally {
+      process.chdir(originalCwd)
+      await rm(ssgDir, { recursive: true, force: true })
+    }
+  })
+
+  it('options.outputDir beats SSG detection', async () => {
+    const ssgDir = await mkdtemp(join(tmpdir(), 'fin14-ssg-override-'))
+    await writeFile(join(ssgDir, 'astro.config.ts'), '')
+    process.chdir(ssgDir)
+    try {
+      const config = await loadConfig({ outputDir: 'custom-out' })
+      assert.equal(config.project.output_dir, 'custom-out')
+    } finally {
+      process.chdir(originalCwd)
+      await rm(ssgDir, { recursive: true, force: true })
+    }
+  })
+
+  after(async () => { if (dir) await rm(dir, { recursive: true, force: true }) })
+})
+
+// ── E03 / E04 error paths ─────────────────────────────────────────────────────
+
+describe('E03/E04 error paths', () => {
+  let dir
+
+  it('setup', async () => { dir = await mkdtemp(join(tmpdir(), 'fin14-errors-')) })
+
+  it('bad TOML syntax → E03', async () => {
+    const file = join(dir, 'bad.toml')
+    await writeFile(file, '[broken\n')
+    await assert.rejects(() => loadConfig({ config: file }), /^Error: E03:/)
+  })
+
+  it('unknown top-level key → E04', async () => {
+    const file = join(dir, 'unknown-key.toml')
+    await writeFile(file, '[unknown_section]\nfoo = 1\n')
+    await assert.rejects(() => loadConfig({ config: file }), /^Error: E04:/)
+  })
+
+  it('unknown sub-key budget.unknown → E04 mentioning budget.unknown', async () => {
+    const file = join(dir, 'budget-unknown.toml')
+    await writeFile(file, '[budget]\nunknown = 1\n')
+    await assert.rejects(
+      () => loadConfig({ config: file }),
+      (err) => {
+        assert.match(err.message, /^E04:/)
+        assert.match(err.message, /budget\.unknown/)
+        return true
+      }
+    )
+  })
+
+  after(async () => { if (dir) await rm(dir, { recursive: true, force: true }) })
+})
+
+// ── Type / range validation ───────────────────────────────────────────────────
+
+describe('type and range validation', () => {
+  let dir
+
+  it('setup', async () => { dir = await mkdtemp(join(tmpdir(), 'fin14-validation-')) })
+
+  it('compression_level = 10 → error', async () => {
+    const file = join(dir, 'comp-level.toml')
+    await writeFile(file, '[budget]\ncompression_level = 10\n')
+    await assert.rejects(() => loadConfig({ config: file }), /compression_level/)
+  })
+
+  it('viewport.default = "tablet" → error', async () => {
+    const file = join(dir, 'viewport.toml')
+    await writeFile(file, '[viewport]\ndefault = "tablet"\n')
+    await assert.rejects(() => loadConfig({ config: file }), /viewport\.default/)
+  })
+
+  after(async () => { if (dir) await rm(dir, { recursive: true, force: true }) })
+})
