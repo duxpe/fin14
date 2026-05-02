@@ -8,6 +8,9 @@
   "engines": { "node": ">=22.0.0" },
   "bin": { "fin14": "./bin/fin14.js" },
   "files": ["bin", "commands", "dev-server", "README.md", "LICENSE"],
+  "scripts": {
+    "test": "node --test test/*.js"
+  },
   "dependencies": {
     "@fin14/core": "^0.1.0",
     "chokidar": "^5.0.0"
