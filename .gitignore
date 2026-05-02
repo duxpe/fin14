@@ -9,6 +9,9 @@ dist/
 .env
 .env.*
 
+# fin14 external resource cache
+.fin14/
+
 # editor / tool config
 .claude/
 .codex
