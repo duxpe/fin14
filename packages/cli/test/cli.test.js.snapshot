@@ -1,0 +1,11 @@
+exports[`output snapshots > audit command: fail-site audit block format (with cut candidates) 1`] = `
+"  audit  index.html\\n  ────────────────────────────────────────────────────────────────\\n  total    28.9 kB / 14.0 kB   ✗   +14.9 kB\\n  ────────────────────────────────────────────────────────────────\\n  HTML    28.9 kB   index.html\\n  CSS     —\\n  JS      —\\n  Images  —\\n  Ext     —\\n  ────────────────────────────────────────────────────────────────\\n  cut candidates\\n  → index.html              28.9 kB   HTML is large\\n"
+`;
+
+exports[`output snapshots > audit command: pass-site audit block format 1`] = `
+"  audit  index.html\\n  ────────────────────────────────────────────────────────────────\\n  total    0.1 kB / 14.0 kB   ✓\\n  ────────────────────────────────────────────────────────────────\\n  HTML    0.1 kB    index.html\\n  CSS     —\\n  JS      —\\n  Images  —\\n  Ext     —\\n  ────────────────────────────────────────────────────────────────\\n  cut candidates\\n  → index.html              0.1 kB    HTML is large\\n"
+`;
+
+exports[`output snapshots > default command: pass-site summary line format 1`] = `
+"  pages  1   pass  1   warn  0   fail  0\\n"
+`;
