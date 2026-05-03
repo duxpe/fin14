@@ -3,7 +3,7 @@ import { strict as assert } from 'node:assert'
 import { mkdtemp, writeFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { tmpdir } from 'node:os'
-import { loadConfig } from '../src/index.js'
+import { DEFAULT_CONFIG, loadConfig } from '../src/index.js'
 
 // ── E2E ──────────────────────────────────────────────────────────────────────
 
@@ -41,8 +41,8 @@ default = "desktop"
     assert.equal(config.network.max_redirects, 3)
     assert.equal(config.viewport.default, 'desktop')
     // defaults still present for untouched viewport presets
-    assert.equal(config.viewport.mobile.width, 390)
-    assert.equal(config.viewport.desktop.width, 1366)
+    assert.equal(config.viewport.mobile.width, DEFAULT_CONFIG.viewport.mobile.width)
+    assert.equal(config.viewport.desktop.width, DEFAULT_CONFIG.viewport.desktop.width)
   })
 
   after(async () => { if (dir) await rm(dir, { recursive: true, force: true }) })
@@ -58,16 +58,17 @@ describe('e2e: empty config uses all defaults', () => {
 
     assert.equal(config.project.output_dir, null)
     assert.equal(config.project.build_command, null)
-    assert.equal(config.budget.default, 14000)
-    assert.equal(config.budget.compression, 'gzip')
-    assert.equal(config.budget.compression_level, 6)
-    assert.equal(config.network.timeout_ms, 5000)
-    assert.equal(config.network.max_redirects, 5)
-    assert.equal(config.viewport.default, 'mobile')
-    assert.equal(config.viewport.mobile.width, 390)
-    assert.equal(config.viewport.mobile.height, 844)
-    assert.equal(config.viewport.desktop.width, 1366)
-    assert.equal(config.viewport.desktop.height, 768)
+    assert.equal(config.budget.default, DEFAULT_CONFIG.budget.default)
+    assert.equal(config.budget.compression, DEFAULT_CONFIG.budget.compression)
+    assert.equal(config.budget.compression_level, DEFAULT_CONFIG.budget.compression_level)
+    assert.equal(config.budget.cut_candidate_min_bytes, DEFAULT_CONFIG.budget.cut_candidate_min_bytes)
+    assert.equal(config.network.timeout_ms, DEFAULT_CONFIG.network.timeout_ms)
+    assert.equal(config.network.max_redirects, DEFAULT_CONFIG.network.max_redirects)
+    assert.equal(config.viewport.default, DEFAULT_CONFIG.viewport.default)
+    assert.equal(config.viewport.mobile.width, DEFAULT_CONFIG.viewport.mobile.width)
+    assert.equal(config.viewport.mobile.height, DEFAULT_CONFIG.viewport.mobile.height)
+    assert.equal(config.viewport.desktop.width, DEFAULT_CONFIG.viewport.desktop.width)
+    assert.equal(config.viewport.desktop.height, DEFAULT_CONFIG.viewport.desktop.height)
   })
 
   after(async () => { if (dir) await rm(dir, { recursive: true, force: true }) })

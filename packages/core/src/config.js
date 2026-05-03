@@ -1,5 +1,6 @@
 import { readFile, access } from 'node:fs/promises'
 import { parse } from 'smol-toml'
+import { BYTES_PER_KB, DEFAULT_CONFIG } from './constants.js'
 
 const SSG_DETECTORS = [
   { files: ['hugo.toml', 'hugo.yaml', 'hugo.json'],                                                dir: 'public' },
@@ -16,18 +17,6 @@ async function detectOutputDir(cwd) {
     }
   }
   return null
-}
-
-const DEFAULTS = {
-  project: { output_dir: null, build_command: null },
-  budget: { default: 14000, compression: 'gzip', compression_level: 6, cut_candidate_min_bytes: 2800 },
-  network: { timeout_ms: 5000, max_redirects: 5 },
-  viewport: {
-    default: 'mobile',
-    mobile:  { width: 390,  height: 844, lazy_visible_images: 1 },
-    desktop: { width: 1366, height: 768, lazy_visible_images: 1 },
-  },
-  warnings: { exclude: [] },
 }
 
 const KNOWN_KEYS = {
@@ -64,7 +53,7 @@ function parseBudgetDefault(value) {
     if (!match) {
       throw new Error(`fin14.toml: budget.default: invalid value "${value}", expected integer or "NNkb" string`)
     }
-    return Math.round(parseFloat(match[1]) * 1000)
+    return Math.round(parseFloat(match[1]) * BYTES_PER_KB)
   }
   throw new Error(`fin14.toml: budget.default: expected integer or string, got ${typeof value}`)
 }
@@ -96,15 +85,15 @@ function validateViewportPreset(preset, name, userPreset) {
 
 function mergeConfig(user) {
   const result = {
-    project:  { ...DEFAULTS.project },
-    budget:   { ...DEFAULTS.budget },
-    network:  { ...DEFAULTS.network },
+    project:  { ...DEFAULT_CONFIG.project },
+    budget:   { ...DEFAULT_CONFIG.budget },
+    network:  { ...DEFAULT_CONFIG.network },
     viewport: {
-      default: DEFAULTS.viewport.default,
-      mobile:  { ...DEFAULTS.viewport.mobile },
-      desktop: { ...DEFAULTS.viewport.desktop },
+      default: DEFAULT_CONFIG.viewport.default,
+      mobile:  { ...DEFAULT_CONFIG.viewport.mobile },
+      desktop: { ...DEFAULT_CONFIG.viewport.desktop },
     },
-    warnings: { exclude: [] },
+    warnings: { exclude: [...DEFAULT_CONFIG.warnings.exclude] },
   }
 
   for (const key of Object.keys(user)) {

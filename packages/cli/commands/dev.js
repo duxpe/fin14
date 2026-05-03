@@ -1,4 +1,4 @@
-import { loadConfig, measureSite } from '@fin14/core'
+import { DEFAULT_CONFIG, loadConfig, measureSite } from '@fin14/core'
 import { spawn } from 'node:child_process'
 import { stat } from 'node:fs/promises'
 import { isAbsolute, relative } from 'node:path'
@@ -16,6 +16,15 @@ import { createSsePool } from '../dev-server/sse.js'
 import { startServer } from '../dev-server/server.js'
 import { createWatcher } from '../dev-server/watcher.js'
 import { startTui, ACTIONS, ALL_WARNINGS, pageCount, visiblePageRows } from '../dev-server/tui.js'
+import { MS_PER_SECOND, TUI_FALLBACK_ROWS } from '../dev-server/constants.js'
+
+function summaryPayload(summary, state, config) {
+  return {
+    ...summary,
+    hiddenWarnings: [...state.hiddenWarnings],
+    cutCandidateMinBytes: config.budget?.cut_candidate_min_bytes ?? DEFAULT_CONFIG.budget.cut_candidate_min_bytes,
+  }
+}
 
 export async function runDev(parsed) {
   const isTTY = process.stdout.isTTY === true
@@ -49,7 +58,7 @@ export async function runDev(parsed) {
         }
         tui.renderNow()
         if (state.summary) {
-          pool.broadcast('summary', { ...state.summary, hiddenWarnings: [...state.hiddenWarnings], cutCandidateMinBytes: config.budget?.cut_candidate_min_bytes ?? 2800 })
+          pool.broadcast('summary', summaryPayload(state.summary, state, config))
         }
       },
     })
@@ -107,7 +116,7 @@ export async function runDev(parsed) {
         message: summary.pass + ' pass  ' + summary.warn + ' warn  ' + summary.fail + ' fail  ' + summary.pages + ' pages',
         ts: Date.now(),
       })
-      pool.broadcast('summary', { ...summary, hiddenWarnings: [...state.hiddenWarnings], cutCandidateMinBytes: config.budget?.cut_candidate_min_bytes ?? 2800 })
+      pool.broadcast('summary', summaryPayload(summary, state, config))
       if (!isTTY) {
         process.stdout.write(
           'pass ' + summary.pass + '  warn ' + summary.warn +
@@ -158,7 +167,7 @@ export async function runDev(parsed) {
 
     if (code === 0) {
       recordBuildTime(state, buildMs)
-      pushActivity(state, { type: 'rebuild', message: 'build succeeded (' + (buildMs / 1000).toFixed(1) + 's)', ts: Date.now() })
+      pushActivity(state, { type: 'rebuild', message: 'build succeeded (' + (buildMs / MS_PER_SECOND).toFixed(1) + 's)', ts: Date.now() })
       const settleMs = computeSettleMs(state)
       state.currentSettleMs = settleMs
       beginBurst(state, 0)
@@ -209,7 +218,7 @@ export async function runDev(parsed) {
           else state.hiddenWarnings.add(code)
           tui.renderNow()
           if (state.summary) {
-            pool.broadcast('summary', { ...state.summary, hiddenWarnings: [...state.hiddenWarnings], cutCandidateMinBytes: config.budget?.cut_candidate_min_bytes ?? 2800 })
+            pool.broadcast('summary', summaryPayload(state.summary, state, config))
           }
         }
       }
@@ -221,7 +230,7 @@ export async function runDev(parsed) {
         tui.renderNow()
         return
       }
-      const rows = process.stdout.rows || 24
+      const rows = process.stdout.rows || TUI_FALLBACK_ROWS
       const pageRows = visiblePageRows(state, rows)
       state.cursor = Math.max(0, state.cursor - 1)
       if (pageRows.length > 0) state.cursor = Math.min(state.cursor, pageRows.length - 1)
@@ -234,7 +243,7 @@ export async function runDev(parsed) {
         tui.renderNow()
         return
       }
-      const rows = process.stdout.rows || 24
+      const rows = process.stdout.rows || TUI_FALLBACK_ROWS
       const pageRows = visiblePageRows(state, rows)
       const max = Math.max(0, pageRows.length - 1)
       state.cursor = Math.min(max, state.cursor + 1)
@@ -248,14 +257,14 @@ export async function runDev(parsed) {
       return
     }
     if (action === ACTIONS.RIGHT) {
-      const rows = process.stdout.rows || 24
+      const rows = process.stdout.rows || TUI_FALLBACK_ROWS
       state.page = Math.min(pageCount(state, rows) - 1, state.page + 1)
       state.cursor = 0
       tui.renderNow()
       return
     }
     if (action === ACTIONS.ENTER) {
-      const rows = process.stdout.rows || 24
+      const rows = process.stdout.rows || TUI_FALLBACK_ROWS
       const pageRows = visiblePageRows(state, rows)
       const selected = pageRows[state.cursor]
       if (selected) {

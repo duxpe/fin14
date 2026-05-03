@@ -1,3 +1,5 @@
+import { SSE_HEARTBEAT_MS } from './constants.js'
+
 export function createSsePool() {
   const clients = new Set();
   let lastSummary = null;
@@ -7,7 +9,7 @@ export function createSsePool() {
     for (const client of clients) {
       client.write(': ping\n\n');
     }
-  }, 15000);
+  }, SSE_HEARTBEAT_MS);
 
   function sendEvent(res, name, obj) {
     const data = JSON.stringify(obj);

@@ -1,6 +1,14 @@
 import { emitKeypressEvents } from 'node:readline'
+import { BYTES_PER_KB } from '@fin14/core'
 import { topOffenders, hintLine } from './dev-state.js'
 import { formatBytes, dim, red, yellow, green } from '../commands/format.js'
+import {
+  TUI_FALLBACK_COLUMNS,
+  TUI_FALLBACK_ROWS,
+  TUI_FRAME_NON_ROW_LINES,
+  TUI_PROGRESS_WIDTH,
+  TUI_RENDER_DEBOUNCE_MS,
+} from './constants.js'
 
 export const ACTIONS = {
   QUIT: 'quit',
@@ -29,8 +37,6 @@ export const ALL_WARNINGS = [
   { code: 'E19', message: 'Unknown budget from fetch failure or failed build' },
 ]
 
-const FRAME_NON_ROW_LINES = 8
-
 function effectiveStatus(page, hidden) {
   if (page.status === 'fail') return 'fail'
   if (page.status === 'warn') {
@@ -58,7 +64,7 @@ function trunc(s, w) {
 }
 
 function pageSlots(rows) {
-  return Math.max(0, rows - FRAME_NON_ROW_LINES)
+  return Math.max(0, rows - TUI_FRAME_NON_ROW_LINES)
 }
 
 function statusRank(status) {
@@ -126,15 +132,15 @@ function pageGroupStr(page) {
   const parts = []
   const h = gb(groups.html), c = gb(groups.css), j = gb(groups.js)
   const img = gb(groups.images), e = gb(groups.external)
-  if (h > 0) parts.push('HTML ' + (h / 1000).toFixed(1))
-  if (c > 0) parts.push('CSS ' + (c / 1000).toFixed(1))
-  if (j > 0) parts.push('JS ' + (j / 1000).toFixed(1))
-  if (img > 0) parts.push('Imgs ' + (img / 1000).toFixed(1))
-  if (e > 0) parts.push('Ext ' + (e / 1000).toFixed(1))
+  if (h > 0) parts.push('HTML ' + (h / BYTES_PER_KB).toFixed(1))
+  if (c > 0) parts.push('CSS ' + (c / BYTES_PER_KB).toFixed(1))
+  if (j > 0) parts.push('JS ' + (j / BYTES_PER_KB).toFixed(1))
+  if (img > 0) parts.push('Imgs ' + (img / BYTES_PER_KB).toFixed(1))
+  if (e > 0) parts.push('Ext ' + (e / BYTES_PER_KB).toFixed(1))
   return parts.join('  ')
 }
 
-function progressBar(done, total, width = 16) {
+function progressBar(done, total, width = TUI_PROGRESS_WIDTH) {
   if (!total) return '░'.repeat(width)
   const filled = Math.max(0, Math.min(width, Math.round((done / total) * width)))
   return '█'.repeat(filled) + '░'.repeat(width - filled)
@@ -175,10 +181,10 @@ export function formatPageRow(page, width, isSelected, useColor, hidden = new Se
     else sym = green(sym, true)
   }
 
-  const totalKb = (page.totalBytes / 1000).toFixed(1)
-  const limitKb = (page.limitBytes / 1000).toFixed(1)
+  const totalKb = (page.totalBytes / BYTES_PER_KB).toFixed(1)
+  const limitKb = (page.limitBytes / BYTES_PER_KB).toFixed(1)
   const overKb = page.overBudget
-    ? '  +' + ((page.totalBytes - page.limitBytes) / 1000).toFixed(1)
+    ? '  +' + ((page.totalBytes - page.limitBytes) / BYTES_PER_KB).toFixed(1)
     : ''
   const groups = pageGroupStr(page)
   const prefix = isSelected ? '>' : ' '
@@ -275,7 +281,7 @@ export function buildFrame(state, width, rows, useColor) {
         }
       }
     }
-    const activitySlots = Math.max(0, rows - FRAME_NON_ROW_LINES - lines.length + 5)
+    const activitySlots = Math.max(0, rows - TUI_FRAME_NON_ROW_LINES - lines.length + 5)
     const recentActivity = state.activity.slice(-activitySlots)
     for (const entry of recentActivity) {
       let line
@@ -375,8 +381,8 @@ export function startTui(state, onAction) {
   process.stdin.on('keypress', keypressHandler)
 
   function doRepaint() {
-    const width = process.stdout.columns || 80
-    const rows = process.stdout.rows || 24
+    const width = process.stdout.columns || TUI_FALLBACK_COLUMNS
+    const rows = process.stdout.rows || TUI_FALLBACK_ROWS
     const useColor = process.stdout.hasColors?.() ?? false
     const lines = buildFrame(state, width, rows, useColor)
     paintFrame(process.stdout, lines)
@@ -384,7 +390,7 @@ export function startTui(state, onAction) {
 
   function render() {
     clearTimeout(renderTimer)
-    renderTimer = setTimeout(doRepaint, 50)
+    renderTimer = setTimeout(doRepaint, TUI_RENDER_DEBOUNCE_MS)
   }
 
   function renderNow() {

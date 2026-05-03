@@ -1,4 +1,4 @@
-import { loadConfig, measurePage, measureSite } from '@fin14/core'
+import { BYTES_PER_KB, DEFAULT_CONFIG, loadConfig, measurePage, measureSite } from '@fin14/core'
 import { resolve, dirname } from 'node:path'
 import { stat } from 'node:fs/promises'
 import { formatBytes, statusSymbol, separator, formatWarning, formatCutCandidate, formatGroupLine, effectiveStatus, recount } from './format.js'
@@ -11,10 +11,10 @@ function printAuditBlock(result, isTTY, excluded = new Set(), minBytes = 0) {
   out(sep)
 
   const sym = statusSymbol(effectiveStatus(result, excluded), isTTY)
-  const tKb = (result.totalBytes / 1000).toFixed(1)
-  const lKb = (result.limitBytes / 1000).toFixed(1)
+  const tKb = (result.totalBytes / BYTES_PER_KB).toFixed(1)
+  const lKb = (result.limitBytes / BYTES_PER_KB).toFixed(1)
   const over = result.overBudget
-    ? '   +' + ((result.totalBytes - result.limitBytes) / 1000).toFixed(1) + ' kB'
+    ? '   +' + ((result.totalBytes - result.limitBytes) / BYTES_PER_KB).toFixed(1) + ' kB'
     : ''
   out('  total    ' + tKb + ' / ' + lKb + ' kB   ' + sym + over + '\n')
 
@@ -87,7 +87,7 @@ export async function runAudit(parsed) {
     }
 
     const excluded = new Set(config.warnings?.exclude ?? [])
-    const minBytes = config.budget?.cut_candidate_min_bytes ?? 2800
+    const minBytes = config.budget?.cut_candidate_min_bytes ?? DEFAULT_CONFIG.budget.cut_candidate_min_bytes
 
     const result = await measurePage(absPath, config)
 
@@ -115,7 +115,7 @@ export async function runAudit(parsed) {
   }
 
   const excluded = new Set(config.warnings?.exclude ?? [])
-  const minBytes = config.budget?.cut_candidate_min_bytes ?? 2800
+  const minBytes = config.budget?.cut_candidate_min_bytes ?? DEFAULT_CONFIG.budget.cut_candidate_min_bytes
 
   const outputDir = parsed.args[0] ?? config.project.output_dir
   if (!outputDir) {

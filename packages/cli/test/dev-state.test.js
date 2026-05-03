@@ -13,6 +13,15 @@ import {
   topOffenders,
   hintLine,
 } from '../dev-server/dev-state.js';
+import {
+  ACTIVITY_LIMIT,
+  BUILD_TIME_SAMPLE_LIMIT,
+  SETTLE_INITIAL_MS,
+  SETTLE_MAX_MS,
+  SETTLE_MIN_MS,
+  SYSTEMIC_FAIL_RATIO,
+  TOP_OFFENDER_LIMIT,
+} from '../dev-server/constants.js';
 
 describe('createState', () => {
   it('returns correct initial shape', () => {
@@ -29,7 +38,7 @@ describe('createState', () => {
     assert.equal(state.rebuildError, null);
     assert.equal(state.cycleCount, 0);
     assert.deepEqual(state.buildTimes, []);
-    assert.equal(state.currentSettleMs, 2000);
+    assert.equal(state.currentSettleMs, SETTLE_INITIAL_MS);
     assert.deepEqual(state.activity, []);
     assert.equal(state.cursor, 0);
     assert.equal(state.mode, 'pages');
@@ -51,9 +60,9 @@ describe('createState', () => {
 });
 
 describe('computeSettleMs', () => {
-  it('returns 2000 when no build times recorded', () => {
+  it('returns initial settle delay when no build times recorded', () => {
     const state = createState('', {}, false);
-    assert.equal(computeSettleMs(state), 2000);
+    assert.equal(computeSettleMs(state), SETTLE_INITIAL_MS);
   });
 
   it('returns avg*0.5 rounded when buildTimes set', () => {
@@ -65,20 +74,20 @@ describe('computeSettleMs', () => {
   it('clamps to 200 minimum', () => {
     const state = createState('', {}, false);
     state.buildTimes = [10, 10, 10];
-    assert.ok(computeSettleMs(state) >= 200);
+    assert.ok(computeSettleMs(state) >= SETTLE_MIN_MS);
   });
 
   it('clamps to 5000 maximum', () => {
     const state = createState('', {}, false);
     state.buildTimes = [12000, 12000, 12000];
-    assert.ok(computeSettleMs(state) <= 5000);
+    assert.ok(computeSettleMs(state) <= SETTLE_MAX_MS);
   });
 
   it('fast build times produce settle near floor', () => {
     const state = createState('', {}, false);
     state.buildTimes = [300, 310, 290, 305, 295];
     assert.ok(computeSettleMs(state) < 500, `expected < 500 but got ${computeSettleMs(state)}`);
-    assert.ok(computeSettleMs(state) >= 200);
+    assert.ok(computeSettleMs(state) >= SETTLE_MIN_MS);
   });
 
   it('repeated same build times produce stable settle', () => {
@@ -108,24 +117,24 @@ describe('recordBuildTime', () => {
     assert.deepEqual(state.buildTimes, [1200]);
   });
 
-  it('trims buildTimes to last 10', () => {
+  it('trims buildTimes to the configured sample limit', () => {
     const state = createState('', {}, false);
     for (let i = 0; i < 12; i++) recordBuildTime(state, i * 100);
-    assert.equal(state.buildTimes.length, 10);
-    assert.equal(state.buildTimes[0], 200);
-    assert.equal(state.buildTimes[9], 1100);
+    assert.equal(state.buildTimes.length, BUILD_TIME_SAMPLE_LIMIT);
+    assert.equal(state.buildTimes[0], (12 - BUILD_TIME_SAMPLE_LIMIT) * 100);
+    assert.equal(state.buildTimes[BUILD_TIME_SAMPLE_LIMIT - 1], 1100);
   });
 });
 
 describe('pushActivity', () => {
-  it('adds entry and trims to 20', () => {
+  it('adds entry and trims to the configured activity limit', () => {
     const state = createState('', {}, false);
     for (let i = 0; i < 22; i++) {
       pushActivity(state, { type: 'info', message: `msg ${i}`, ts: i });
     }
-    assert.equal(state.activity.length, 20);
-    assert.equal(state.activity[0].message, 'msg 2');
-    assert.equal(state.activity[19].message, 'msg 21');
+    assert.equal(state.activity.length, ACTIVITY_LIMIT);
+    assert.equal(state.activity[0].message, `msg ${22 - ACTIVITY_LIMIT}`);
+    assert.equal(state.activity[ACTIVITY_LIMIT - 1].message, 'msg 21');
   });
 });
 
@@ -159,10 +168,11 @@ describe('topOffenders', () => {
     assert.deepEqual(topOffenders(state), []);
   });
 
-  it('returns slice(0,3) of topAssets', () => {
+  it('returns configured number of topAssets', () => {
     const state = createState('', {}, false);
-    state.summary = { topAssets: ['a', 'b', 'c', 'd', 'e'], fail: 0, warn: 0, pages: 5 };
-    assert.deepEqual(topOffenders(state), ['a', 'b', 'c']);
+    const assets = ['a', 'b', 'c', 'd', 'e'];
+    state.summary = { topAssets: assets, fail: 0, warn: 0, pages: 5 };
+    assert.deepEqual(topOffenders(state), assets.slice(0, TOP_OFFENDER_LIMIT));
   });
 });
 
@@ -178,9 +188,9 @@ describe('hintLine', () => {
     assert.equal(hintLine(state), 'all pages within budget');
   });
 
-  it('returns systemic hint when fail/pages >= 0.3', () => {
+  it('returns systemic hint when fail/pages reaches configured ratio', () => {
     const state = createState('', {}, false);
-    state.summary = { fail: 3, warn: 0, pages: 10, topAssets: [] };
+    state.summary = { fail: SYSTEMIC_FAIL_RATIO * 10, warn: 0, pages: 10, topAssets: [] };
     const hint = hintLine(state);
     assert.ok(hint.includes('template') || hint.includes('global CSS'), `unexpected: ${hint}`);
   });

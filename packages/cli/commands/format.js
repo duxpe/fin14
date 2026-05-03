@@ -1,3 +1,6 @@
+import { BYTES_PER_KB } from '@fin14/core'
+import { CLI_SEPARATOR_WIDTH } from '../dev-server/constants.js'
+
 const RESET = '\x1b[0m'
 const BOLD = '\x1b[1m'
 const DIM = '\x1b[2m'
@@ -7,7 +10,7 @@ const GREEN = '\x1b[32m'
 
 export function formatBytes(n) {
   if (n === 0) return '—'
-  return (n / 1000).toFixed(1) + ' kB'
+  return (n / BYTES_PER_KB).toFixed(1) + ' kB'
 }
 
 export function statusSymbol(status, isTTY) {
@@ -37,7 +40,7 @@ export function green(text, isTTY) {
 }
 
 export function separator() {
-  return '  ' + '─'.repeat(64)
+  return '  ' + '─'.repeat(CLI_SEPARATOR_WIDTH)
 }
 
 export function formatWarning(warning, isTTY, showCode = false) {

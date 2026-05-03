@@ -1,6 +1,5 @@
 import { watch } from 'chokidar'
-
-const BURST_MS = 300
+import { WATCH_BURST_MS } from './constants.js'
 
 function ignoreFn(p) {
   return (
@@ -33,7 +32,7 @@ export function createWatcher(outputDir, onBatch) {
       burstBuffer = []
       burstTimer = null
       onBatch(paths)
-    }, BURST_MS)
+    }, WATCH_BURST_MS)
   }
 
   watcher.on('add', handleEvent)
