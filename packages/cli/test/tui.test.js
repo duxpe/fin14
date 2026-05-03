@@ -21,6 +21,8 @@ describe('ACTIONS', () => {
     assert.equal(ACTIONS.RIGHT, 'right')
     assert.equal(ACTIONS.ENTER, 'enter')
     assert.equal(ACTIONS.ESC, 'esc')
+    assert.equal(ACTIONS.SPACE, 'space')
+    assert.equal(ACTIONS.FILTERS, 'filters')
   })
 })
 

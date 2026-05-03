@@ -20,20 +20,22 @@ async function detectOutputDir(cwd) {
 
 const DEFAULTS = {
   project: { output_dir: null, build_command: null },
-  budget: { default: 14000, compression: 'gzip', compression_level: 6 },
+  budget: { default: 14000, compression: 'gzip', compression_level: 6, cut_candidate_min_bytes: 2800 },
   network: { timeout_ms: 5000, max_redirects: 5 },
   viewport: {
     default: 'mobile',
     mobile:  { width: 390,  height: 844, lazy_visible_images: 1 },
     desktop: { width: 1366, height: 768, lazy_visible_images: 1 },
   },
+  warnings: { exclude: [] },
 }
 
 const KNOWN_KEYS = {
-  project: new Set(['output_dir', 'build_command']),
-  budget:  new Set(['default', 'compression', 'compression_level']),
-  network: new Set(['timeout_ms', 'max_redirects']),
+  project:  new Set(['output_dir', 'build_command']),
+  budget:   new Set(['default', 'compression', 'compression_level', 'cut_candidate_min_bytes']),
+  network:  new Set(['timeout_ms', 'max_redirects']),
   viewport: new Set(['default', 'mobile', 'desktop']),
+  warnings: new Set(['exclude']),
 }
 
 const VIEWPORT_PRESET_KEYS = new Set(['width', 'height', 'lazy_visible_images'])
@@ -102,6 +104,7 @@ function mergeConfig(user) {
       mobile:  { ...DEFAULTS.viewport.mobile },
       desktop: { ...DEFAULTS.viewport.desktop },
     },
+    warnings: { exclude: [] },
   }
 
   for (const key of Object.keys(user)) {
@@ -149,6 +152,12 @@ function mergeConfig(user) {
       }
       result.budget.compression_level = user.budget.compression_level
     }
+    if (user.budget.cut_candidate_min_bytes !== undefined) {
+      if (!Number.isInteger(user.budget.cut_candidate_min_bytes) || user.budget.cut_candidate_min_bytes < 0) {
+        throw new Error(`E04: fin14.toml: budget.cut_candidate_min_bytes must be a non-negative integer`)
+      }
+      result.budget.cut_candidate_min_bytes = user.budget.cut_candidate_min_bytes
+    }
   }
 
   if (user.network) {
@@ -193,6 +202,20 @@ function mergeConfig(user) {
         throw new Error(`fin14.toml: viewport.desktop: expected object, got ${typeof user.viewport.desktop}`)
       }
       result.viewport.desktop = validateViewportPreset(result.viewport.desktop, 'desktop', user.viewport.desktop)
+    }
+  }
+
+  if (user.warnings) {
+    for (const key of Object.keys(user.warnings)) {
+      if (!KNOWN_KEYS.warnings.has(key)) {
+        throw new Error(`E04: fin14.toml: unknown field 'warnings.${key}'`)
+      }
+    }
+    if (user.warnings.exclude !== undefined) {
+      if (!Array.isArray(user.warnings.exclude) || !user.warnings.exclude.every(v => typeof v === 'string')) {
+        throw new Error(`E04: fin14.toml: warnings.exclude must be an array of strings`)
+      }
+      result.warnings.exclude = user.warnings.exclude
     }
   }
 

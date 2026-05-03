@@ -37,7 +37,18 @@ async function serveHtml(res, filePath) {
   res.end(body);
 }
 
-async function handleRequest(req, res, ssePool) {
+function readJsonBody(req) {
+  return new Promise((resolve, reject) => {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try { resolve(JSON.parse(body)); } catch { resolve({}); }
+    });
+    req.on('error', reject);
+  });
+}
+
+async function handleRequest(req, res, ssePool, opts) {
   const url = req.url.split('?')[0];
 
   if (req.method === 'GET' && url === '/events') {
@@ -57,13 +68,23 @@ async function handleRequest(req, res, ssePool) {
     return;
   }
 
+  if (req.method === 'POST' && url === '/warnings/toggle') {
+    const body = await readJsonBody(req);
+    if (typeof body.code === 'string' && opts?.onToggleWarning) {
+      opts.onToggleWarning(body.code);
+    }
+    res.writeHead(200);
+    res.end();
+    return;
+  }
+
   res.writeHead(404);
   res.end('Not Found');
 }
 
-export async function startServer(ssePool, state) {
+export async function startServer(ssePool, state, opts = {}) {
   const server = http.createServer((req, res) => {
-    handleRequest(req, res, ssePool).catch(() => {
+    handleRequest(req, res, ssePool, opts).catch(() => {
       if (!res.headersSent) res.writeHead(500);
       res.end();
     });

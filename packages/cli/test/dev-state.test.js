@@ -36,6 +36,9 @@ describe('createState', () => {
     assert.equal(state.page, 0);
     assert.deepEqual(state.lastBatchPaths, []);
     assert.equal(state.detailPageFile, null);
+    assert.ok(state.hiddenWarnings instanceof Set, 'hiddenWarnings should be a Set');
+    assert.equal(state.hiddenWarnings.size, 0);
+    assert.equal(state.filtersCursor, 0);
     assert.deepEqual(state.burst, {
       active: false,
       stage: null,
