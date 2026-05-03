@@ -37,6 +37,22 @@ test('measureSite: fixture dir returns SiteSummary with 2 pages all pass', async
   assert.equal(summary.fail, 0)
 })
 
+test('measureSite: progress callbacks report total and page results', async () => {
+  const config = await makeConfig()
+  let started = null
+  const progress = []
+  const summary = await measureSite(fixtureDir, config, {
+    onStart: info => { started = info },
+    onPageResult: (page, info) => progress.push({ page, info }),
+  })
+
+  assert.equal(started.total, summary.pages)
+  assert.equal(progress.length, summary.pages)
+  assert.equal(progress.at(-1).info.done, summary.pages)
+  assert.ok(progress.every(entry => entry.info.total === summary.pages))
+  assert.ok(progress.every(entry => typeof entry.page.file === 'string'))
+})
+
 test('summarize: correct counts and topAssets populated', async () => {
   const config = await makeConfig()
   const r1 = await measurePage(resolve(fixtureDir, 'index.html'), config)

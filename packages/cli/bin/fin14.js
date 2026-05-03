@@ -108,7 +108,7 @@ function printUsage() {
     'fin14 check [dir]         alias for default command\n' +
     'fin14 audit <file.html>   detailed report for a single page\n' +
     'fin14 audit --all [dir]   detailed report for all pages\n' +
-    'fin14 dev [dir]           watch mode with live report (not yet implemented)\n' +
+    'fin14 dev [dir]           watch mode with live report at http://localhost:4214\n' +
     '\n' +
     'global flags:\n' +
     '  --config <path>         path to fin14.toml\n' +
@@ -145,7 +145,9 @@ switch (parsed.command) {
   case 'audit':
     await runAudit(parsed)
     break
-  case 'dev':
-    process.stdout.write('fin14 dev: not yet implemented\n')
-    process.exit(0)
+  case 'dev': {
+    const { runDev } = await import('../commands/dev.js')
+    await runDev(parsed)
+    break
+  }
 }
