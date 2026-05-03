@@ -1,0 +1,425 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>fin14 dev report</title>
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  :root {
+    --bg: #0d1117;
+    --bg2: #161b22;
+    --bg3: #21262d;
+    --border: #30363d;
+    --text: #e6edf3;
+    --text-muted: #8b949e;
+    --green: #3fb950;
+    --red: #f85149;
+    --yellow: #d29922;
+    --blue: #58a6ff;
+  }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: ui-monospace, 'Cascadia Code', 'Fira Code', Consolas, monospace;
+    font-size: 13px;
+    line-height: 1.5;
+    min-height: 100vh;
+  }
+
+  header {
+    background: var(--bg2);
+    border-bottom: 1px solid var(--border);
+    padding: 12px 20px;
+    display: flex;
+    align-items: center;
+    gap: 16px;
+    flex-wrap: wrap;
+    position: sticky;
+    top: 0;
+    z-index: 10;
+  }
+
+  .header-title { font-weight: 700; font-size: 14px; flex-shrink: 0; }
+  .header-dir { color: var(--text-muted); font-size: 12px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; flex: 1 1 auto; }
+
+  .header-stats { display: flex; gap: 12px; flex-shrink: 0; align-items: center; }
+  .stat { font-size: 12px; }
+  .stat-pass { color: var(--green); }
+  .stat-warn { color: var(--yellow); }
+  .stat-fail { color: var(--red); }
+  .stat-muted { color: var(--text-muted); }
+
+  .header-time { color: var(--text-muted); font-size: 11px; flex-shrink: 0; }
+
+  .connection-badge { display: flex; align-items: center; gap: 6px; font-size: 11px; color: var(--text-muted); flex-shrink: 0; }
+  .dot { width: 8px; height: 8px; border-radius: 50%; background: var(--text-muted); flex-shrink: 0; }
+  .dot-connected { background: var(--green); }
+  .dot-reconnecting { background: var(--yellow); }
+
+  .error-banner {
+    background: #2d1117;
+    border: 1px solid var(--red);
+    color: var(--red);
+    padding: 10px 20px;
+    margin: 12px 20px;
+    border-radius: 6px;
+    font-size: 12px;
+    display: none;
+  }
+
+  .rebuilding-badge {
+    background: #1c2030;
+    border: 1px solid var(--blue);
+    color: var(--blue);
+    padding: 2px 8px;
+    border-radius: 4px;
+    font-size: 11px;
+    display: none;
+  }
+
+  main { padding: 16px 20px; max-width: 1200px; margin: 0 auto; }
+
+  .section-title {
+    font-size: 11px;
+    color: var(--text-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 8px;
+  }
+
+  .budget-map { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 24px; }
+
+  .map-btn {
+    width: 20px;
+    height: 20px;
+    border: none;
+    border-radius: 3px;
+    cursor: pointer;
+    background: var(--bg3);
+    outline: 2px solid transparent;
+  }
+  .map-btn:hover { opacity: 0.8; }
+  .map-btn:focus { outline: 2px solid var(--blue); outline-offset: 1px; }
+  .map-btn.green { background: var(--green); }
+  .map-btn.yellow { background: var(--yellow); }
+  .map-btn.red { background: var(--red); }
+
+  .page-table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 12px; }
+  .page-table th { text-align: left; color: var(--text-muted); font-weight: 400; padding: 6px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
+  .page-table th.col-status { text-align: center; }
+  .page-table th.col-size,
+  .page-table th.col-limit,
+  .page-table th.col-over { text-align: right; }
+  .page-table td { padding: 6px 10px; border-bottom: 1px solid var(--border); vertical-align: middle; }
+  .page-table tr:last-child td { border-bottom: none; }
+  .page-table tbody tr { cursor: pointer; }
+  .page-table tbody tr:hover { background: var(--bg2); }
+  .page-table tbody tr:focus { background: var(--bg2); outline: 2px solid var(--blue); outline-offset: -2px; }
+  .page-table tbody tr.selected { background: var(--bg3); }
+
+  .col-status { width: 28px; text-align: center; }
+  .col-file { word-break: break-all; }
+  .col-size { white-space: nowrap; text-align: right; }
+  .col-limit { white-space: nowrap; text-align: right; color: var(--text-muted); }
+  .col-over { white-space: nowrap; text-align: right; color: var(--red); }
+
+  .status-pass { color: var(--green); }
+  .status-warn { color: var(--yellow); }
+  .status-fail { color: var(--red); }
+
+  .panel-overlay {
+    position: fixed;
+    top: 0; right: 0; bottom: 0;
+    width: 420px;
+    max-width: 100vw;
+    background: var(--bg2);
+    border-left: 1px solid var(--border);
+    overflow-y: auto;
+    z-index: 100;
+    display: none;
+    padding: 16px;
+  }
+  .panel-overlay.open { display: block; }
+
+  .panel-header { display: flex; align-items: flex-start; gap: 8px; margin-bottom: 16px; }
+  .panel-title { font-size: 13px; font-weight: 700; flex: 1; word-break: break-all; }
+  .panel-close { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 16px; padding: 2px 6px; border-radius: 4px; flex-shrink: 0; }
+  .panel-close:hover { background: var(--bg3); color: var(--text); }
+
+  .panel-section { margin-bottom: 16px; }
+  .panel-section-title { font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin-bottom: 6px; }
+
+  .resource-row { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; padding: 3px 0; font-size: 12px; border-bottom: 1px solid var(--border); }
+  .resource-row:last-child { border-bottom: none; }
+  .resource-label { color: var(--text-muted); flex-shrink: 0; }
+  .resource-path { word-break: break-all; flex: 1; text-align: right; }
+  .resource-size { flex-shrink: 0; color: var(--text-muted); }
+
+  .warning-item { padding: 4px 8px; background: #1c1610; border: 1px solid var(--yellow); border-radius: 4px; font-size: 11px; color: var(--yellow); margin-bottom: 4px; }
+  .cut-item { padding: 4px 8px; background: var(--bg3); border-radius: 4px; font-size: 11px; color: var(--text-muted); margin-bottom: 4px; }
+  .cut-item strong { color: var(--text); }
+
+  .empty-state { text-align: center; color: var(--text-muted); padding: 40px 20px; font-size: 12px; }
+</style>
+</head>
+<body>
+
+<header>
+  <span class="header-title">fin14</span>
+  <span class="header-dir" id="hdr-dir">—</span>
+  <div class="header-stats">
+    <span class="stat stat-pass" id="hdr-pass">— pass</span>
+    <span class="stat stat-warn" id="hdr-warn">— warn</span>
+    <span class="stat stat-fail" id="hdr-fail">— fail</span>
+    <span class="stat stat-muted" id="hdr-total">—</span>
+  </div>
+  <span class="rebuilding-badge" id="rebuilding-badge">rebuilding…</span>
+  <span class="header-time" id="hdr-time"></span>
+  <div class="connection-badge">
+    <div class="dot" id="conn-dot"></div>
+    <span id="conn-label">connecting…</span>
+  </div>
+</header>
+
+<div class="error-banner" id="error-banner"></div>
+
+<main>
+  <div class="empty-state" id="empty-state">Waiting for first measurement…</div>
+
+  <div id="report-content" style="display:none">
+    <div class="section-title">Budget Map</div>
+    <div class="budget-map" id="budget-map"></div>
+
+    <div class="section-title">Pages</div>
+    <table class="page-table" id="page-table">
+      <thead>
+        <tr>
+          <th class="col-status">⊙</th>
+          <th class="col-file">File</th>
+          <th class="col-size">Size</th>
+          <th class="col-limit">Limit</th>
+          <th class="col-over">Over</th>
+        </tr>
+      </thead>
+      <tbody id="page-tbody"></tbody>
+    </table>
+  </div>
+</main>
+
+<div class="panel-overlay" id="panel" role="dialog" aria-modal="true" aria-label="Page details">
+  <div class="panel-header">
+    <span class="panel-title" id="panel-title"></span>
+    <button class="panel-close" id="panel-close" aria-label="Close panel">✕</button>
+  </div>
+  <div id="panel-body"></div>
+</div>
+
+<script>
+  const DEFAULT_LIMIT = 14000
+
+  let selectedRow = null
+
+  const connDot = document.getElementById('conn-dot')
+  const connLabel = document.getElementById('conn-label')
+  const hdrDir = document.getElementById('hdr-dir')
+  const hdrPass = document.getElementById('hdr-pass')
+  const hdrWarn = document.getElementById('hdr-warn')
+  const hdrFail = document.getElementById('hdr-fail')
+  const hdrTotal = document.getElementById('hdr-total')
+  const hdrTime = document.getElementById('hdr-time')
+  const rebuildingBadge = document.getElementById('rebuilding-badge')
+  const errorBanner = document.getElementById('error-banner')
+  const emptyState = document.getElementById('empty-state')
+  const reportContent = document.getElementById('report-content')
+  const budgetMap = document.getElementById('budget-map')
+  const pageTbody = document.getElementById('page-tbody')
+  const panel = document.getElementById('panel')
+  const panelTitle = document.getElementById('panel-title')
+  const panelBody = document.getElementById('panel-body')
+  const panelClose = document.getElementById('panel-close')
+
+  function fmt(bytes) {
+    if (!bytes) return '—'
+    return (bytes / 1000).toFixed(1) + ' kB'
+  }
+
+  function mapColor(page) {
+    if (page.status === 'fail') return 'red'
+    if (page.status === 'warn') return 'yellow'
+    return 'green'
+  }
+
+  function statusClass(status) {
+    return status === 'pass' ? 'status-pass' : status === 'warn' ? 'status-warn' : 'status-fail'
+  }
+
+  function statusIcon(status) {
+    return status === 'pass' ? '✓' : status === 'warn' ? '⚠' : '✗'
+  }
+
+  function escHtml(s) {
+    return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;')
+  }
+
+  function groupResources(resources) {
+    const groups = { HTML: [], CSS: [], JS: [], Images: [], External: [], Other: [] }
+    for (const r of resources) {
+      const t = r.type
+      if (t === 'html') groups.HTML.push(r)
+      else if (t === 'css') groups.CSS.push(r)
+      else if (t === 'js') groups.JS.push(r)
+      else if (t === 'image') groups.Images.push(r)
+      else if (t === 'external') groups.External.push(r)
+      else groups.Other.push(r)
+    }
+    return groups
+  }
+
+  function cutHint(r) {
+    if (r.type === 'image') return 'add loading=lazy or compress'
+    if (r.type === 'css') return 'purge unused rules'
+    if (r.type === 'js') return 'tree-shake or defer'
+    return ''
+  }
+
+  function renderSummary(summary) {
+    rebuildingBadge.style.display = 'none'
+    errorBanner.style.display = 'none'
+
+    hdrDir.textContent = summary.outputDir
+    hdrPass.textContent = summary.pass + ' pass'
+    hdrWarn.textContent = summary.warn + ' warn'
+    hdrFail.textContent = summary.fail + ' fail'
+    hdrTotal.textContent = fmt(summary.totalBytes)
+    hdrTime.textContent = 'updated ' + new Date().toLocaleTimeString()
+
+    emptyState.style.display = 'none'
+    reportContent.style.display = ''
+
+    const sorted = (summary.results || []).slice().sort((a, b) => b.totalBytes - a.totalBytes)
+
+    budgetMap.innerHTML = ''
+    pageTbody.innerHTML = ''
+
+    sorted.forEach((page, i) => {
+      const btn = document.createElement('button')
+      btn.className = 'map-btn ' + mapColor(page)
+      const label = page.file + ' — ' + page.status + ' — ' + fmt(page.totalBytes)
+      btn.title = label
+      btn.setAttribute('aria-label', label)
+      btn.addEventListener('click', () => {
+        const row = document.getElementById('row-' + i)
+        if (row) { row.scrollIntoView({ block: 'center', behavior: 'smooth' }); row.focus() }
+      })
+      budgetMap.appendChild(btn)
+
+      const tr = document.createElement('tr')
+      tr.id = 'row-' + i
+      tr.tabIndex = 0
+      tr.setAttribute('role', 'button')
+      tr.setAttribute('aria-label', 'View details for ' + page.file)
+
+      const limit = page.limitBytes || DEFAULT_LIMIT
+      const over = page.totalBytes > limit ? page.totalBytes - limit : 0
+
+      tr.innerHTML =
+        '<td class="col-status"><span class="' + statusClass(page.status) + '">' + statusIcon(page.status) + '</span></td>' +
+        '<td class="col-file">' + escHtml(page.file) + '</td>' +
+        '<td class="col-size">' + fmt(page.totalBytes) + '</td>' +
+        '<td class="col-limit">' + fmt(limit) + '</td>' +
+        '<td class="col-over">' + (over ? '+' + fmt(over) : '') + '</td>'
+
+      tr.addEventListener('click', () => openPanel(page, tr))
+      tr.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openPanel(page, tr) }
+      })
+
+      pageTbody.appendChild(tr)
+    })
+  }
+
+  function openPanel(page, row) {
+    if (selectedRow) selectedRow.classList.remove('selected')
+    selectedRow = row
+    row.classList.add('selected')
+
+    panelTitle.textContent = page.file
+
+    const groups = groupResources(page.resources || [])
+    let html = '<div class="panel-section"><div class="panel-section-title">Resources</div>'
+
+    for (const [label, items] of Object.entries(groups)) {
+      if (!items.length) continue
+      const total = items.reduce((s, r) => s + (r.bytes || 0), 0)
+      html += '<div class="resource-row">'
+      html += '<span class="resource-label">' + label + '</span>'
+      html += '<span class="resource-path">' + (items.length === 1 ? escHtml(items[0].displayPath || items[0].file || '') : items.length + ' files') + '</span>'
+      html += '<span class="resource-size">' + fmt(total) + '</span>'
+      html += '</div>'
+    }
+    html += '</div>'
+
+    if (page.warnings && page.warnings.length) {
+      html += '<div class="panel-section"><div class="panel-section-title">Warnings</div>'
+      for (const w of page.warnings) {
+        html += '<div class="warning-item">' + escHtml(w.code ? w.code + ': ' + w.message : w.message) + '</div>'
+      }
+      html += '</div>'
+    }
+
+    const cuts = (page.resources || []).filter(r => r.bytes > 1000 && r.type !== 'external')
+      .sort((a, b) => b.bytes - a.bytes).slice(0, 5)
+
+    if (cuts.length) {
+      html += '<div class="panel-section"><div class="panel-section-title">Cut Candidates</div>'
+      for (const r of cuts) {
+        const hint = cutHint(r)
+        html += '<div class="cut-item"><strong>' + escHtml(r.displayPath || r.file || '') + '</strong> ' + fmt(r.bytes) + (hint ? ' — ' + escHtml(hint) : '') + '</div>'
+      }
+      html += '</div>'
+    }
+
+    panelBody.innerHTML = html
+    panel.classList.add('open')
+    panelClose.focus()
+  }
+
+  function closePanel() {
+    panel.classList.remove('open')
+    if (selectedRow) {
+      selectedRow.classList.remove('selected')
+      selectedRow.focus()
+      selectedRow = null
+    }
+  }
+
+  panelClose.addEventListener('click', closePanel)
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && panel.classList.contains('open')) closePanel()
+  })
+
+  const es = new EventSource('/events')
+
+  es.addEventListener('open', () => {
+    connDot.className = 'dot dot-connected'
+    connLabel.textContent = 'connected'
+  })
+
+  es.addEventListener('error', () => {
+    connDot.className = 'dot dot-reconnecting'
+    connLabel.textContent = 'reconnecting…'
+  })
+
+  es.addEventListener('summary', (e) => {
+    try { renderSummary(JSON.parse(e.data)) } catch {}
+  })
+
+  es.addEventListener('rebuilding', () => {
+    rebuildingBadge.style.display = ''
+  })
+</script>
+</body>
+</html>

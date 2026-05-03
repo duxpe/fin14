@@ -11,8 +11,12 @@ function printAuditBlock(result, isTTY) {
   out(sep)
 
   const sym = statusSymbol(result.status, isTTY)
-  const over = result.overBudget ? '   +' + formatBytes(result.totalBytes - result.limitBytes) : ''
-  out('  total    ' + formatBytes(result.totalBytes) + ' / ' + formatBytes(result.limitBytes) + '   ' + sym + over + '\n')
+  const tKb = (result.totalBytes / 1000).toFixed(1)
+  const lKb = (result.limitBytes / 1000).toFixed(1)
+  const over = result.overBudget
+    ? '   +' + ((result.totalBytes - result.limitBytes) / 1000).toFixed(1) + ' kB'
+    : ''
+  out('  total    ' + tKb + ' / ' + lKb + ' kB   ' + sym + over + '\n')
 
   out(sep)
 
@@ -84,6 +88,10 @@ export async function runAudit(parsed) {
     const result = await measurePage(absPath, config)
 
     printAuditBlock(result, isTTY)
+
+    if (result.overBudget && !parsed.flags.force) {
+      process.stdout.write('\n  Use --force to ignore budget failures.\n')
+    }
 
     const hasOverBudget = result.overBudget
     const hasStrictFailure = result.warnings.some(w => w.strictFailure)

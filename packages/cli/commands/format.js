@@ -77,3 +77,18 @@ export function formatGroupLine(label, resources, isTTY) {
 
   return lines.join('\n')
 }
+
+export function pageGroupSummary(result) {
+  const groups = { html: [], css: [], js: [], images: [], external: [] }
+  for (const r of result.resources) groups[r.group].push(r)
+  const gb = (arr) => arr.reduce((s, r) => s + r.bytes, 0)
+  const parts = []
+  const h = gb(groups.html), c = gb(groups.css), j = gb(groups.js)
+  const i = gb(groups.images), e = gb(groups.external)
+  if (h > 0) parts.push('HTML ' + formatBytes(h))
+  if (c > 0) parts.push('CSS ' + formatBytes(c))
+  if (j > 0) parts.push('JS ' + formatBytes(j))
+  if (i > 0) parts.push('Imgs ' + formatBytes(i))
+  if (e > 0) parts.push('Ext ' + formatBytes(e))
+  return parts.join('  ')
+}

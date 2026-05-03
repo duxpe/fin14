@@ -15,20 +15,29 @@ export async function measurePage(file, config) {
   return pageResult
 }
 
-export async function measureSite(outputDir, config) {
+export async function measureSite(outputDir, config, options = {}) {
   const configWithDir = { ...config, project: { ...config.project, output_dir: outputDir } }
   const relPaths = await crawl(outputDir)
   const absPaths = relPaths.map(p => resolve(outputDir, p))
+  const total = absPaths.length
+
+  options.onStart?.({ total, files: relPaths })
 
   let batchSize = 50
   let i = 0
+  let done = 0
   const results = []
   const siteWarnings = []
 
   while (i < absPaths.length) {
     const batch = absPaths.slice(i, i + batchSize)
     try {
-      const batchResults = await Promise.all(batch.map(f => measurePage(f, configWithDir)))
+      const batchResults = await Promise.all(batch.map(async f => {
+        const result = await measurePage(f, configWithDir)
+        done++
+        options.onPageResult?.(result, { done, total })
+        return result
+      }))
       results.push(...batchResults)
       i += batch.length
     } catch (err) {
