@@ -239,8 +239,6 @@
 </div>
 
 <script>
-  const DEFAULT_LIMIT = 14000
-
   const ALL_WARNINGS = [
     { code: 'E06', message: 'CSS file not found — excluded from budget' },
     { code: 'E07', message: 'JS file not found — excluded from budget' },
@@ -255,11 +253,13 @@
     { code: 'E19', message: 'Unknown budget from fetch failure or failed build' },
   ]
 
+  const BYTES_PER_KB = 1000
+
   let selectedRow = null
   let hiddenWarnings = new Set()
   let lastSummary = null
   let filtersExpanded = false
-  let cutCandidateMinBytes = 2000
+  let cutCandidateMinBytes = 0
 
   const connDot = document.getElementById('conn-dot')
   const connLabel = document.getElementById('conn-label')
@@ -283,7 +283,7 @@
 
   function fmt(bytes) {
     if (!bytes) return '—'
-    return (bytes / 1000).toFixed(1) + ' kB'
+    return (bytes / BYTES_PER_KB).toFixed(1) + ' kB'
   }
 
   function effectiveStatus(page) {
@@ -380,7 +380,7 @@
   function renderSummary(summary) {
     lastSummary = summary
     hiddenWarnings = new Set(summary.hiddenWarnings ?? [])
-    cutCandidateMinBytes = summary.cutCandidateMinBytes ?? 2000
+    cutCandidateMinBytes = summary.cutCandidateMinBytes ?? 0
 
     rebuildingBadge.style.display = 'none'
     errorBanner.style.display = 'none'
@@ -427,8 +427,8 @@
       tr.setAttribute('role', 'button')
       tr.setAttribute('aria-label', 'View details for ' + page.file)
 
-      const limit = page.limitBytes || DEFAULT_LIMIT
-      const over = page.totalBytes > limit ? page.totalBytes - limit : 0
+      const limit = page.limitBytes
+      const over = typeof limit === 'number' && page.totalBytes > limit ? page.totalBytes - limit : 0
 
       tr.innerHTML =
         '<td class="col-status"><span class="' + statusClass(effectiveStatus(page)) + '">' + statusIcon(effectiveStatus(page)) + '</span></td>' +

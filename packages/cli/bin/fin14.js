@@ -1,6 +1,7 @@
 #!/usr/bin/env node
 import { runDefault } from '../commands/default.js'
 import { runAudit } from '../commands/audit.js'
+import { DEV_PORT_START } from '../dev-server/constants.js'
 
 const KNOWN_COMMANDS = new Set(['check', 'audit', 'dev'])
 const KNOWN_FLAGS = new Set(['config', 'verbose', 'force', 'strict', 'build', 'all', 'help'])
@@ -108,7 +109,7 @@ function printUsage() {
     'fin14 check [dir]         alias for default command\n' +
     'fin14 audit <file.html>   detailed report for a single page\n' +
     'fin14 audit --all [dir]   detailed report for all pages\n' +
-    'fin14 dev [dir]           watch mode with live report at http://localhost:4214\n' +
+    `fin14 dev [dir]           watch mode with live report at http://localhost:${DEV_PORT_START}\n` +
     '\n' +
     'global flags:\n' +
     '  --config <path>         path to fin14.toml\n' +

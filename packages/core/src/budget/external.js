@@ -1,8 +1,13 @@
 import { createHash } from 'node:crypto'
 import { readFile, writeFile, mkdir } from 'node:fs/promises'
 import { join } from 'node:path'
-
-const TTL = 3600
+import {
+  DEFAULT_CONFIG,
+  EXTERNAL_CACHE_TTL_SECONDS,
+  EXTERNAL_DOMAIN_CONCURRENCY,
+  EXTERNAL_DOMAIN_WAIT_MS,
+  MILLISECONDS_PER_SECOND,
+} from '../constants.js'
 
 function cacheDir() {
   return join(process.cwd(), '.fin14', 'cache')
@@ -17,7 +22,7 @@ async function readCache(url) {
   const key = urlKey(url)
   try {
     const meta = JSON.parse(await readFile(join(dir, `${key}.json`), 'utf8'))
-    if (Math.floor(Date.now() / 1000) - meta.cachedAt > TTL) return null
+    if (Math.floor(Date.now() / MILLISECONDS_PER_SECOND) - meta.cachedAt > EXTERNAL_CACHE_TTL_SECONDS) return null
     const body = await readFile(join(dir, `${key}.body`))
     return { body, status: meta.status, contentType: meta.contentType }
   } catch {
@@ -29,7 +34,7 @@ async function writeCache(url, body, status, contentType) {
   const dir = cacheDir()
   await mkdir(dir, { recursive: true })
   const key = urlKey(url)
-  const meta = { url, cachedAt: Math.floor(Date.now() / 1000), status, contentType }
+  const meta = { url, cachedAt: Math.floor(Date.now() / MILLISECONDS_PER_SECOND), status, contentType }
   await writeFile(join(dir, `${key}.body`), body)
   await writeFile(join(dir, `${key}.json`), JSON.stringify(meta))
 }
@@ -37,8 +42,8 @@ async function writeCache(url, body, status, contentType) {
 const domainCounts = new Map()
 
 async function withDomainLimit(hostname, fn) {
-  while ((domainCounts.get(hostname) ?? 0) >= 10) {
-    await new Promise(r => setTimeout(r, 50))
+  while ((domainCounts.get(hostname) ?? 0) >= EXTERNAL_DOMAIN_CONCURRENCY) {
+    await new Promise(r => setTimeout(r, EXTERNAL_DOMAIN_WAIT_MS))
   }
   domainCounts.set(hostname, (domainCounts.get(hostname) ?? 0) + 1)
   try { return await fn() }
@@ -51,8 +56,8 @@ export async function fetchExternal(url, config) {
 
   const hostname = new URL(url).hostname
   return withDomainLimit(hostname, async () => {
-    const timeoutMs = config?.network?.timeout_ms ?? 5000
-    const maxRedirects = config?.network?.max_redirects ?? 5
+    const timeoutMs = config?.network?.timeout_ms ?? DEFAULT_CONFIG.network.timeout_ms
+    const maxRedirects = config?.network?.max_redirects ?? DEFAULT_CONFIG.network.max_redirects
     const controller = new AbortController()
     const timer = setTimeout(() => controller.abort(), timeoutMs)
 

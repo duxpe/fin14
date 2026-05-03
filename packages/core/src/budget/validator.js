@@ -1,3 +1,5 @@
+import { BYTES_PER_KB, STRICT_IPV6_LIMIT_BYTES } from '../constants.js'
+
 export function validate(results, skipped, warnings, config, file) {
   const limitBytes = config.budget.default
   const totalBytes = results.reduce((sum, r) => sum + r.bytes, 0)
@@ -6,10 +8,10 @@ export function validate(results, skipped, warnings, config, file) {
 
   const newWarnings = [...warnings]
 
-  if (totalBytes > 12200 && !overBudget) {
+  if (totalBytes > STRICT_IPV6_LIMIT_BYTES && !overBudget) {
     newWarnings.push({
       code: 'E13',
-      message: `${file}: ${(totalBytes / 1000).toFixed(1)}kB exceeds IPv6 heuristic (12.2kB)`,
+      message: `${file}: ${(totalBytes / BYTES_PER_KB).toFixed(1)}kB exceeds IPv6 heuristic (12.2kB)`,
       path: file,
       strictFailure: true,
     })

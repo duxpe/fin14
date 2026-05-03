@@ -2,13 +2,14 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { DEV_HOST, DEV_PORT_END, DEV_PORT_START } from './constants.js';
 
 const reportUiDir = fileURLToPath(new URL('../dev-server/report-ui/', import.meta.url));
 
 function tryListen(server, port) {
   return new Promise((resolve, reject) => {
     server.once('error', reject);
-    server.listen(port, '127.0.0.1', () => {
+    server.listen(port, DEV_HOST, () => {
       server.removeListener('error', reject);
       resolve(port);
     });
@@ -91,7 +92,7 @@ export async function startServer(ssePool, state, opts = {}) {
   });
 
   let port;
-  for (let p = 4214; p <= 4223; p++) {
+  for (let p = DEV_PORT_START; p <= DEV_PORT_END; p++) {
     try {
       await tryListen(server, p);
       port = p;
@@ -102,7 +103,7 @@ export async function startServer(ssePool, state, opts = {}) {
   }
 
   if (port === undefined) {
-    throw new Error('no available port in range 4214–4223');
+    throw new Error(`no available port in range ${DEV_PORT_START}–${DEV_PORT_END}`);
   }
 
   function close() {

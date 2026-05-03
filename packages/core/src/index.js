@@ -1,9 +1,15 @@
 export { loadConfig } from './config.js'
+export * from './constants.js'
 import { collect } from './budget/collector.js'
 import { measure } from './budget/measurer.js'
 import { validate } from './budget/validator.js'
 import { crawl } from './crawler.js'
 import { relative, resolve } from 'node:path'
+import {
+  SITE_EMFILE_RETRY_BATCH_SIZE,
+  SITE_PAGE_BATCH_SIZE,
+  SUMMARY_TOP_ASSET_LIMIT,
+} from './constants.js'
 
 export async function measurePage(file, config) {
   const { refs, skipped, warnings: collectWarnings } = await collect(file, config.project.output_dir, config)
@@ -23,7 +29,7 @@ export async function measureSite(outputDir, config, options = {}) {
 
   options.onStart?.({ total, files: relPaths })
 
-  let batchSize = 50
+  let batchSize = SITE_PAGE_BATCH_SIZE
   let i = 0
   let done = 0
   const results = []
@@ -41,9 +47,9 @@ export async function measureSite(outputDir, config, options = {}) {
       results.push(...batchResults)
       i += batch.length
     } catch (err) {
-      if (err.code === 'EMFILE' && batchSize > 10) {
-        batchSize = 10
-        siteWarnings.push({ code: 'E15', message: 'too many open files — retrying with batch size 10', strictFailure: false })
+      if (err.code === 'EMFILE' && batchSize > SITE_EMFILE_RETRY_BATCH_SIZE) {
+        batchSize = SITE_EMFILE_RETRY_BATCH_SIZE
+        siteWarnings.push({ code: 'E15', message: `too many open files — retrying with batch size ${SITE_EMFILE_RETRY_BATCH_SIZE}`, strictFailure: false })
       } else {
         throw err
       }
@@ -67,7 +73,7 @@ export function summarize(results, outputDir, siteWarnings = []) {
       }
     }
   }
-  const topAssets = [...seen.values()].sort((a, b) => b.bytes - a.bytes).slice(0, 10)
+  const topAssets = [...seen.values()].sort((a, b) => b.bytes - a.bytes).slice(0, SUMMARY_TOP_ASSET_LIMIT)
 
   return {
     outputDir,

@@ -1,4 +1,4 @@
-import { loadConfig, measureSite } from '@fin14/core'
+import { BYTES_PER_KB, DEFAULT_CONFIG, loadConfig, measureSite } from '@fin14/core'
 import { spawn } from 'node:child_process'
 import { stat } from 'node:fs/promises'
 import { formatBytes, statusSymbol, formatWarning, formatCutCandidate, pageGroupSummary, green, effectiveStatus, recount } from './format.js'
@@ -91,7 +91,7 @@ export async function runDefault(parsed) {
     process.stdout.write(formatWarning(siteWarning, isTTY) + '\n')
   }
 
-  const minBytes = config.budget?.cut_candidate_min_bytes ?? 2800
+  const minBytes = config.budget?.cut_candidate_min_bytes ?? DEFAULT_CONFIG.budget.cut_candidate_min_bytes
 
   const flaggedPages = summary.results
     .filter(r => r.overBudget || r.warnings.length > 0)
@@ -103,10 +103,10 @@ export async function runDefault(parsed) {
 
   for (const result of flaggedPages) {
     const visibleWarnings = result.warnings.filter(w => !excluded.has(w.code))
-    const totalKb = (result.totalBytes / 1000).toFixed(1)
-    const limitKb = (result.limitBytes / 1000).toFixed(1)
+    const totalKb = (result.totalBytes / BYTES_PER_KB).toFixed(1)
+    const limitKb = (result.limitBytes / BYTES_PER_KB).toFixed(1)
     const overKb = result.overBudget
-      ? '   +' + ((result.totalBytes - result.limitBytes) / 1000).toFixed(1) + ' kB'
+      ? '   +' + ((result.totalBytes - result.limitBytes) / BYTES_PER_KB).toFixed(1) + ' kB'
       : ''
     process.stdout.write(
       '\n  ' + statusSymbol(effectiveStatus(result, excluded), isTTY) +
