@@ -1,7 +1,7 @@
 import { loadConfig, measureSite } from '@fin14/core'
 import { spawn } from 'node:child_process'
 import { stat } from 'node:fs/promises'
-import { formatBytes, statusSymbol, formatWarning, formatCutCandidate, pageGroupSummary, green } from './format.js'
+import { formatBytes, statusSymbol, formatWarning, formatCutCandidate, pageGroupSummary, green, effectiveStatus, recount } from './format.js'
 
 async function runBuild(command) {
   return new Promise((resolve) => {
@@ -51,6 +51,8 @@ export async function runDefault(parsed) {
     }
   }
 
+  const excluded = new Set(config.warnings?.exclude ?? [])
+
   let summary
   try {
     summary = await measureSite(outputDir, config)
@@ -76,47 +78,53 @@ export async function runDefault(parsed) {
     process.exit(1)
   }
 
+  const counts = recount(summary.results, excluded)
   process.stdout.write(
-    '  pass ' + summary.pass +
-    '   warn ' + summary.warn +
-    '   fail ' + summary.fail +
+    '  pass ' + counts.pass +
+    '   warn ' + counts.warn +
+    '   fail ' + counts.fail +
     '   ' + summary.pages + ' pages\n'
   )
 
-  for (const siteWarning of summary.siteWarnings) {
+  const visibleSiteWarnings = summary.siteWarnings.filter(w => !excluded.has(w.code))
+  for (const siteWarning of visibleSiteWarnings) {
     process.stdout.write(formatWarning(siteWarning, isTTY) + '\n')
   }
+
+  const minBytes = config.budget?.cut_candidate_min_bytes ?? 2800
 
   const flaggedPages = summary.results
     .filter(r => r.overBudget || r.warnings.length > 0)
     .sort((a, b) => {
       const order = { fail: 0, warn: 1, pass: 2 }
-      const sd = (order[a.status] ?? 2) - (order[b.status] ?? 2)
+      const sd = (order[effectiveStatus(a, excluded)] ?? 2) - (order[effectiveStatus(b, excluded)] ?? 2)
       return sd !== 0 ? sd : b.totalBytes - a.totalBytes
     })
 
   for (const result of flaggedPages) {
+    const visibleWarnings = result.warnings.filter(w => !excluded.has(w.code))
     const totalKb = (result.totalBytes / 1000).toFixed(1)
     const limitKb = (result.limitBytes / 1000).toFixed(1)
     const overKb = result.overBudget
       ? '   +' + ((result.totalBytes - result.limitBytes) / 1000).toFixed(1) + ' kB'
       : ''
     process.stdout.write(
-      '\n  ' + statusSymbol(result.status, isTTY) +
+      '\n  ' + statusSymbol(effectiveStatus(result, excluded), isTTY) +
       '  ' + result.file +
       '    ' + totalKb + ' / ' + limitKb + ' kB' + overKb + '\n'
     )
     const groups = pageGroupSummary(result)
     if (groups) process.stdout.write('     ' + groups + '\n')
     for (const c of result.cutCandidates) {
-      process.stdout.write(formatCutCandidate(c, isTTY) + '\n')
+      const line = formatCutCandidate(c, isTTY, minBytes)
+      if (line !== null) process.stdout.write(line + '\n')
     }
-    for (const w of result.warnings) {
+    for (const w of visibleWarnings) {
       process.stdout.write(formatWarning(w, isTTY) + '\n')
     }
   }
 
-  if (summary.fail === 0 && summary.warn === 0) {
+  if (counts.fail === 0 && counts.warn === 0) {
     process.stdout.write('  ' + green('✓', isTTY) + '  all pages within budget\n')
   }
 
@@ -133,8 +141,8 @@ export async function runDefault(parsed) {
 
   const hasOverBudget = summary.results.some(r => r.overBudget)
   const hasStrictFailure =
-    summary.results.some(r => r.warnings.some(w => w.strictFailure)) ||
-    summary.siteWarnings.some(w => w.strictFailure)
+    summary.results.some(r => r.warnings.some(w => w.strictFailure && !excluded.has(w.code))) ||
+    summary.siteWarnings.some(w => w.strictFailure && !excluded.has(w.code))
 
   if (hasOverBudget && !parsed.flags.force) {
     process.stdout.write('\n  Use --force to ignore budget failures.\n')

@@ -40,8 +40,9 @@ export function separator() {
   return '  ' + '─'.repeat(64)
 }
 
-export function formatWarning(warning, isTTY) {
-  return '  ' + (isTTY ? YELLOW : '') + '⚠' + (isTTY ? RESET : '') + '  ' + warning.code + '  ' + warning.message
+export function formatWarning(warning, isTTY, showCode = false) {
+  const prefix = showCode ? warning.code + '  ' : ''
+  return '  ' + (isTTY ? YELLOW : '') + '⚠' + (isTTY ? RESET : '') + '  ' + prefix + warning.message
 }
 
 const HINTS = {
@@ -52,9 +53,29 @@ const HINTS = {
   html: 'HTML is large',
 }
 
-export function formatCutCandidate(resource, isTTY) {
+export function formatCutCandidate(resource, isTTY, minBytes = 0) {
+  if (resource.bytes < minBytes) return null
   const hint = HINTS[resource.type] ?? 'large resource'
   return '  → ' + resource.displayPath.padEnd(24) + formatBytes(resource.bytes).padEnd(10) + hint
+}
+
+export function effectiveStatus(page, excluded) {
+  if (page.status === 'fail') return 'fail'
+  if (page.status === 'warn') {
+    return page.warnings.every(w => excluded.has(w.code)) ? 'pass' : 'warn'
+  }
+  return page.status
+}
+
+export function recount(results, excluded) {
+  let pass = 0, warn = 0, fail = 0
+  for (const r of results) {
+    const s = effectiveStatus(r, excluded)
+    if (s === 'pass') pass++
+    else if (s === 'warn') warn++
+    else fail++
+  }
+  return { pass, warn, fail }
 }
 
 export function formatGroupLine(label, resources, isTTY) {

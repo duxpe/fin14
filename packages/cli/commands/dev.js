@@ -15,7 +15,7 @@ import {
 import { createSsePool } from '../dev-server/sse.js'
 import { startServer } from '../dev-server/server.js'
 import { createWatcher } from '../dev-server/watcher.js'
-import { startTui, ACTIONS, pageCount, visiblePageRows } from '../dev-server/tui.js'
+import { startTui, ACTIONS, ALL_WARNINGS, pageCount, visiblePageRows } from '../dev-server/tui.js'
 
 export async function runDev(parsed) {
   const isTTY = process.stdout.isTTY === true
@@ -35,11 +35,24 @@ export async function runDev(parsed) {
   }
 
   const state = createState(outputDir, config, isTTY)
+  state.hiddenWarnings = new Set(config.warnings?.exclude ?? [])
   const pool = createSsePool()
 
   let closeServer
   try {
-    const server = await startServer(pool, state)
+    const server = await startServer(pool, state, {
+      onToggleWarning: (code) => {
+        if (state.hiddenWarnings.has(code)) {
+          state.hiddenWarnings.delete(code)
+        } else {
+          state.hiddenWarnings.add(code)
+        }
+        tui.renderNow()
+        if (state.summary) {
+          pool.broadcast('summary', { ...state.summary, hiddenWarnings: [...state.hiddenWarnings], cutCandidateMinBytes: config.budget?.cut_candidate_min_bytes ?? 2800 })
+        }
+      },
+    })
     state.port = server.port
     closeServer = server.close
   } catch (err) {
@@ -94,7 +107,7 @@ export async function runDev(parsed) {
         message: summary.pass + ' pass  ' + summary.warn + ' warn  ' + summary.fail + ' fail  ' + summary.pages + ' pages',
         ts: Date.now(),
       })
-      pool.broadcast('summary', summary)
+      pool.broadcast('summary', { ...summary, hiddenWarnings: [...state.hiddenWarnings], cutCandidateMinBytes: config.budget?.cut_candidate_min_bytes ?? 2800 })
       if (!isTTY) {
         process.stdout.write(
           'pass ' + summary.pass + '  warn ' + summary.warn +
@@ -178,36 +191,67 @@ export async function runDev(parsed) {
     if (action === ACTIONS.ESC) {
       state.mode = 'pages'
       state.detailPageFile = null
-      tui.render()
+      tui.renderNow()
+      return
+    }
+    if (action === ACTIONS.FILTERS) {
+      state.mode = state.mode === 'filters' ? 'pages' : 'filters'
+      state.filtersCursor = 0
+      tui.renderNow()
+      return
+    }
+    if (action === ACTIONS.SPACE) {
+      if (state.mode === 'filters') {
+        const item = ALL_WARNINGS[state.filtersCursor]
+        if (item) {
+          const code = item.code
+          if (state.hiddenWarnings.has(code)) state.hiddenWarnings.delete(code)
+          else state.hiddenWarnings.add(code)
+          tui.renderNow()
+          if (state.summary) {
+            pool.broadcast('summary', { ...state.summary, hiddenWarnings: [...state.hiddenWarnings], cutCandidateMinBytes: config.budget?.cut_candidate_min_bytes ?? 2800 })
+          }
+        }
+      }
       return
     }
     if (action === ACTIONS.UP) {
+      if (state.mode === 'filters') {
+        state.filtersCursor = Math.max(0, state.filtersCursor - 1)
+        tui.renderNow()
+        return
+      }
       const rows = process.stdout.rows || 24
       const pageRows = visiblePageRows(state, rows)
       state.cursor = Math.max(0, state.cursor - 1)
       if (pageRows.length > 0) state.cursor = Math.min(state.cursor, pageRows.length - 1)
-      tui.render()
+      tui.renderNow()
       return
     }
     if (action === ACTIONS.DOWN) {
+      if (state.mode === 'filters') {
+        state.filtersCursor = Math.min(ALL_WARNINGS.length - 1, state.filtersCursor + 1)
+        tui.renderNow()
+        return
+      }
       const rows = process.stdout.rows || 24
       const pageRows = visiblePageRows(state, rows)
       const max = Math.max(0, pageRows.length - 1)
       state.cursor = Math.min(max, state.cursor + 1)
-      tui.render()
+      tui.renderNow()
       return
     }
     if (action === ACTIONS.LEFT) {
       state.page = Math.max(0, state.page - 1)
       state.cursor = 0
-      tui.render()
+      tui.renderNow()
       return
     }
     if (action === ACTIONS.RIGHT) {
       const rows = process.stdout.rows || 24
       state.page = Math.min(pageCount(state, rows) - 1, state.page + 1)
       state.cursor = 0
-      tui.render()
+      tui.renderNow()
       return
     }
     if (action === ACTIONS.ENTER) {
@@ -222,7 +266,7 @@ export async function runDev(parsed) {
           state.mode = 'detail'
           state.detailPageFile = selected.file
         }
-        tui.render()
+        tui.renderNow()
       }
       return
     }

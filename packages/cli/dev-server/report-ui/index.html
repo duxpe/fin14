@@ -163,6 +163,19 @@
   .cut-item strong { color: var(--text); }
 
   .empty-state { text-align: center; color: var(--text-muted); padding: 40px 20px; font-size: 12px; }
+
+  .warnings-toggle { margin-bottom: 16px; }
+  .warnings-toggle-header { display: flex; align-items: center; gap: 6px; cursor: pointer; user-select: none; font-size: 11px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; padding: 4px 0; }
+  .warnings-toggle-header:hover { color: var(--text); }
+  .warnings-toggle-arrow { font-size: 10px; }
+  .warnings-codes { margin-top: 6px; display: flex; flex-direction: column; gap: 2px; }
+  .warning-filter-row { display: flex; align-items: baseline; gap: 8px; font-size: 11px; cursor: pointer; padding: 4px 6px; border-radius: 3px; }
+  .warning-filter-row:hover { background: var(--bg3); }
+  .warning-filter-row input { cursor: pointer; flex-shrink: 0; }
+  .warning-filter-code { color: var(--yellow); flex-shrink: 0; min-width: 32px; font-weight: 600; }
+  .warning-filter-msg { color: var(--text-muted); }
+  .warning-filter-row.hidden .warning-filter-code { color: var(--text-muted); opacity: 0.5; }
+  .warning-filter-row.hidden .warning-filter-msg { opacity: 0.4; }
 </style>
 </head>
 <body>
@@ -188,6 +201,14 @@
 
 <main>
   <div class="empty-state" id="empty-state">Waiting for first measurement…</div>
+
+  <div id="warnings-toggle-section" class="warnings-toggle">
+    <div class="warnings-toggle-header" id="warnings-toggle-header">
+      <span class="warnings-toggle-arrow" id="warnings-toggle-arrow">▶</span>
+      <span>Warning Filters</span>
+    </div>
+    <div class="warnings-codes" id="warnings-codes" style="display:none"></div>
+  </div>
 
   <div id="report-content" style="display:none">
     <div class="section-title">Budget Map</div>
@@ -220,7 +241,25 @@
 <script>
   const DEFAULT_LIMIT = 14000
 
+  const ALL_WARNINGS = [
+    { code: 'E06', message: 'CSS file not found — excluded from budget' },
+    { code: 'E07', message: 'JS file not found — excluded from budget' },
+    { code: 'E08', message: 'Image or font file not found — excluded from budget' },
+    { code: 'E09', message: 'External resource fetch failed — budget unknown' },
+    { code: 'E10', message: 'CSS @import file not found — excluded' },
+    { code: 'E11', message: 'CSS @import cycle detected' },
+    { code: 'E13', message: 'Page exceeds IPv6 heuristic (12.2 kB)' },
+    { code: 'E14', message: 'External resource counted in budget' },
+    { code: 'E15', message: 'Too many open files — retried with smaller batch' },
+    { code: 'E18', message: 'Resource outside v1 matrix (verbose only)' },
+    { code: 'E19', message: 'Unknown budget from fetch failure or failed build' },
+  ]
+
   let selectedRow = null
+  let hiddenWarnings = new Set()
+  let lastSummary = null
+  let filtersExpanded = false
+  let cutCandidateMinBytes = 2000
 
   const connDot = document.getElementById('conn-dot')
   const connLabel = document.getElementById('conn-label')
@@ -240,15 +279,36 @@
   const panelTitle = document.getElementById('panel-title')
   const panelBody = document.getElementById('panel-body')
   const panelClose = document.getElementById('panel-close')
+  const warningsCodes = document.getElementById('warnings-codes')
 
   function fmt(bytes) {
     if (!bytes) return '—'
     return (bytes / 1000).toFixed(1) + ' kB'
   }
 
+  function effectiveStatus(page) {
+    if (page.status === 'fail') return 'fail'
+    if (page.status === 'warn') {
+      return (page.warnings || []).every(w => hiddenWarnings.has(w.code)) ? 'pass' : 'warn'
+    }
+    return page.status
+  }
+
+  function recount(results) {
+    let pass = 0, warn = 0, fail = 0
+    for (const r of results) {
+      const s = effectiveStatus(r)
+      if (s === 'pass') pass++
+      else if (s === 'warn') warn++
+      else fail++
+    }
+    return { pass, warn, fail }
+  }
+
   function mapColor(page) {
-    if (page.status === 'fail') return 'red'
-    if (page.status === 'warn') return 'yellow'
+    const s = effectiveStatus(page)
+    if (s === 'fail') return 'red'
+    if (s === 'warn') return 'yellow'
     return 'green'
   }
 
@@ -285,21 +345,66 @@
     return ''
   }
 
+  async function toggleWarning(code) {
+    await fetch('/warnings/toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ code }),
+    })
+  }
+
+  function renderWarningFilters() {
+    warningsCodes.innerHTML = ''
+    warningsCodes.style.display = filtersExpanded ? '' : 'none'
+    for (const w of ALL_WARNINGS) {
+      const isHidden = hiddenWarnings.has(w.code)
+      const row = document.createElement('label')
+      row.className = 'warning-filter-row' + (isHidden ? ' hidden' : '')
+      const cb = document.createElement('input')
+      cb.type = 'checkbox'
+      cb.checked = !isHidden
+      cb.addEventListener('change', () => toggleWarning(w.code))
+      const codeSpan = document.createElement('span')
+      codeSpan.className = 'warning-filter-code'
+      codeSpan.textContent = w.code
+      const msgSpan = document.createElement('span')
+      msgSpan.className = 'warning-filter-msg'
+      msgSpan.textContent = w.message
+      row.appendChild(cb)
+      row.appendChild(codeSpan)
+      row.appendChild(msgSpan)
+      warningsCodes.appendChild(row)
+    }
+  }
+
   function renderSummary(summary) {
+    lastSummary = summary
+    hiddenWarnings = new Set(summary.hiddenWarnings ?? [])
+    cutCandidateMinBytes = summary.cutCandidateMinBytes ?? 2000
+
     rebuildingBadge.style.display = 'none'
     errorBanner.style.display = 'none'
 
     hdrDir.textContent = summary.outputDir
-    hdrPass.textContent = summary.pass + ' pass'
-    hdrWarn.textContent = summary.warn + ' warn'
-    hdrFail.textContent = summary.fail + ' fail'
+    const counts = recount(summary.results || [])
+    hdrPass.textContent = counts.pass + ' pass'
+    hdrWarn.textContent = counts.warn + ' warn'
+    hdrFail.textContent = counts.fail + ' fail'
     hdrTotal.textContent = fmt(summary.totalBytes)
     hdrTime.textContent = 'updated ' + new Date().toLocaleTimeString()
 
     emptyState.style.display = 'none'
     reportContent.style.display = ''
 
-    const sorted = (summary.results || []).slice().sort((a, b) => b.totalBytes - a.totalBytes)
+    renderWarningFilters()
+
+    const statusRank = { fail: 0, warn: 1, pass: 2 }
+    const sorted = (summary.results || []).slice().sort((a, b) => {
+      const ra = statusRank[effectiveStatus(a)] ?? 2
+      const rb = statusRank[effectiveStatus(b)] ?? 2
+      if (ra !== rb) return ra - rb
+      return b.totalBytes - a.totalBytes
+    })
 
     budgetMap.innerHTML = ''
     pageTbody.innerHTML = ''
@@ -307,7 +412,7 @@
     sorted.forEach((page, i) => {
       const btn = document.createElement('button')
       btn.className = 'map-btn ' + mapColor(page)
-      const label = page.file + ' — ' + page.status + ' — ' + fmt(page.totalBytes)
+      const label = page.file + ' — ' + effectiveStatus(page) + ' — ' + fmt(page.totalBytes)
       btn.title = label
       btn.setAttribute('aria-label', label)
       btn.addEventListener('click', () => {
@@ -326,7 +431,7 @@
       const over = page.totalBytes > limit ? page.totalBytes - limit : 0
 
       tr.innerHTML =
-        '<td class="col-status"><span class="' + statusClass(page.status) + '">' + statusIcon(page.status) + '</span></td>' +
+        '<td class="col-status"><span class="' + statusClass(effectiveStatus(page)) + '">' + statusIcon(effectiveStatus(page)) + '</span></td>' +
         '<td class="col-file">' + escHtml(page.file) + '</td>' +
         '<td class="col-size">' + fmt(page.totalBytes) + '</td>' +
         '<td class="col-limit">' + fmt(limit) + '</td>' +
@@ -362,15 +467,16 @@
     }
     html += '</div>'
 
-    if (page.warnings && page.warnings.length) {
+    const visiblePageWarnings = (page.warnings || []).filter(w => !hiddenWarnings.has(w.code))
+    if (visiblePageWarnings.length) {
       html += '<div class="panel-section"><div class="panel-section-title">Warnings</div>'
-      for (const w of page.warnings) {
-        html += '<div class="warning-item">' + escHtml(w.code ? w.code + ': ' + w.message : w.message) + '</div>'
+      for (const w of visiblePageWarnings) {
+        html += '<div class="warning-item">' + escHtml(w.message) + '</div>'
       }
       html += '</div>'
     }
 
-    const cuts = (page.resources || []).filter(r => r.bytes > 1000 && r.type !== 'external')
+    const cuts = (page.resources || []).filter(r => r.bytes >= cutCandidateMinBytes && r.type !== 'external')
       .sort((a, b) => b.bytes - a.bytes).slice(0, 5)
 
     if (cuts.length) {
@@ -395,6 +501,12 @@
       selectedRow = null
     }
   }
+
+  document.getElementById('warnings-toggle-header').addEventListener('click', () => {
+    filtersExpanded = !filtersExpanded
+    document.getElementById('warnings-toggle-arrow').textContent = filtersExpanded ? '▼' : '▶'
+    renderWarningFilters()
+  })
 
   panelClose.addEventListener('click', closePanel)
   document.addEventListener('keydown', (e) => {

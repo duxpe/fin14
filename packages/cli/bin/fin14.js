@@ -116,7 +116,7 @@ function printUsage() {
     '\n' +
     'default / check / audit flags:\n' +
     '  --force                 exit 0 even on budget failures\n' +
-    '  --strict                fail on E13, E14, E19 warnings\n' +
+    '  --strict                fail on strict-mode warnings (external resources, near-limit pages, unknown budget)\n' +
     '  --build                 run build_command before measuring\n'
   )
 }

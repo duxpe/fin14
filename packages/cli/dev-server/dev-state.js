@@ -19,6 +19,8 @@ export function createState(outputDir, config, isTTY) {
     page: 0,
     lastBatchPaths: [],
     detailPageFile: null,
+    hiddenWarnings: new Set(),
+    filtersCursor: 0,
     burst: {
       active: false,
       stage: null,

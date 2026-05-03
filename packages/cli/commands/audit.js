@@ -1,16 +1,16 @@
 import { loadConfig, measurePage, measureSite } from '@fin14/core'
 import { resolve, dirname } from 'node:path'
 import { stat } from 'node:fs/promises'
-import { formatBytes, statusSymbol, separator, formatWarning, formatCutCandidate, formatGroupLine } from './format.js'
+import { formatBytes, statusSymbol, separator, formatWarning, formatCutCandidate, formatGroupLine, effectiveStatus, recount } from './format.js'
 
-function printAuditBlock(result, isTTY) {
+function printAuditBlock(result, isTTY, excluded = new Set(), minBytes = 0) {
   const out = process.stdout.write.bind(process.stdout)
   const sep = separator() + '\n'
 
   out('  audit  ' + result.file + '\n')
   out(sep)
 
-  const sym = statusSymbol(result.status, isTTY)
+  const sym = statusSymbol(effectiveStatus(result, excluded), isTTY)
   const tKb = (result.totalBytes / 1000).toFixed(1)
   const lKb = (result.limitBytes / 1000).toFixed(1)
   const over = result.overBudget
@@ -31,18 +31,19 @@ function printAuditBlock(result, isTTY) {
 
   out(sep)
 
-  if (result.cutCandidates.length > 0) {
+  const visibleCuts = result.cutCandidates.map(c => formatCutCandidate(c, isTTY, minBytes)).filter(l => l !== null)
+  if (visibleCuts.length > 0) {
     out('  cut candidates\n')
-    for (const c of result.cutCandidates) {
-      out(formatCutCandidate(c, isTTY) + '\n')
+    for (const line of visibleCuts) {
+      out(line + '\n')
     }
   }
 
-  const strictWarnings = result.warnings.filter(w => w.strictFailure)
+  const strictWarnings = result.warnings.filter(w => w.strictFailure && !excluded.has(w.code))
   if (strictWarnings.length > 0) {
     out(sep)
     for (const w of strictWarnings) {
-      out(formatWarning(w, isTTY) + '\n')
+      out(formatWarning(w, isTTY, true) + '\n')
     }
   }
 }
@@ -85,16 +86,19 @@ export async function runAudit(parsed) {
       config = { ...config, project: { ...config.project, output_dir: dirname(absPath) } }
     }
 
+    const excluded = new Set(config.warnings?.exclude ?? [])
+    const minBytes = config.budget?.cut_candidate_min_bytes ?? 2800
+
     const result = await measurePage(absPath, config)
 
-    printAuditBlock(result, isTTY)
+    printAuditBlock(result, isTTY, excluded, minBytes)
 
     if (result.overBudget && !parsed.flags.force) {
       process.stdout.write('\n  Use --force to ignore budget failures.\n')
     }
 
     const hasOverBudget = result.overBudget
-    const hasStrictFailure = result.warnings.some(w => w.strictFailure)
+    const hasStrictFailure = result.warnings.some(w => w.strictFailure && !excluded.has(w.code))
 
     let shouldFail = false
     if (hasOverBudget && !parsed.flags.force) shouldFail = true
@@ -109,6 +113,9 @@ export async function runAudit(parsed) {
     process.stderr.write(err.message + '\n')
     process.exit(1)
   }
+
+  const excluded = new Set(config.warnings?.exclude ?? [])
+  const minBytes = config.budget?.cut_candidate_min_bytes ?? 2800
 
   const outputDir = parsed.args[0] ?? config.project.output_dir
   if (!outputDir) {
@@ -134,20 +141,21 @@ export async function runAudit(parsed) {
 
   for (let i = 0; i < summary.results.length; i++) {
     if (i > 0) process.stdout.write('\n')
-    printAuditBlock(summary.results[i], isTTY)
+    printAuditBlock(summary.results[i], isTTY, excluded, minBytes)
   }
 
+  const counts = recount(summary.results, excluded)
   const sep = separator()
   process.stdout.write(sep + '\n')
   process.stdout.write(
     '  total    ' + summary.pages + ' pages' +
-    '   pass ' + summary.pass +
-    '   warn ' + summary.warn +
-    '   fail ' + summary.fail + '\n'
+    '   pass ' + counts.pass +
+    '   warn ' + counts.warn +
+    '   fail ' + counts.fail + '\n'
   )
 
   const hasOverBudget = summary.results.some(r => r.overBudget)
-  const hasStrictFailure = summary.results.some(r => r.warnings.some(w => w.strictFailure))
+  const hasStrictFailure = summary.results.some(r => r.warnings.some(w => w.strictFailure && !excluded.has(w.code)))
 
   let shouldFail = false
   if (hasOverBudget && !parsed.flags.force) shouldFail = true

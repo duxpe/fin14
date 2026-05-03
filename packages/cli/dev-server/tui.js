@@ -11,9 +11,46 @@ export const ACTIONS = {
   RIGHT: 'right',
   ENTER: 'enter',
   ESC: 'esc',
+  SPACE: 'space',
+  FILTERS: 'filters',
 }
 
+export const ALL_WARNINGS = [
+  { code: 'E06', message: 'CSS file not found — excluded from budget' },
+  { code: 'E07', message: 'JS file not found — excluded from budget' },
+  { code: 'E08', message: 'Image or font file not found — excluded from budget' },
+  { code: 'E09', message: 'External resource fetch failed — budget unknown' },
+  { code: 'E10', message: 'CSS @import file not found — excluded' },
+  { code: 'E11', message: 'CSS @import cycle detected' },
+  { code: 'E13', message: 'Page exceeds IPv6 heuristic (12.2 kB)' },
+  { code: 'E14', message: 'External resource counted in budget' },
+  { code: 'E15', message: 'Too many open files — retried with smaller batch' },
+  { code: 'E18', message: 'Resource outside v1 matrix (verbose only)' },
+  { code: 'E19', message: 'Unknown budget from fetch failure or failed build' },
+]
+
 const FRAME_NON_ROW_LINES = 8
+
+function effectiveStatus(page, hidden) {
+  if (page.status === 'fail') return 'fail'
+  if (page.status === 'warn') {
+    const warnings = page.warnings ?? []
+    if (warnings.length === 0) return 'warn'
+    return warnings.every(w => hidden.has(w.code)) ? 'pass' : 'warn'
+  }
+  return page.status
+}
+
+function recount(results, hidden) {
+  let pass = 0, warn = 0, fail = 0
+  for (const r of results) {
+    const s = effectiveStatus(r, hidden)
+    if (s === 'pass') pass++
+    else if (s === 'warn') warn++
+    else fail++
+  }
+  return { pass, warn, fail }
+}
 
 function trunc(s, w) {
   if (s.length <= w) return s
@@ -28,9 +65,9 @@ function statusRank(status) {
   return { fail: 0, warn: 1, pass: 2 }[status] ?? 3
 }
 
-function sortPageRows(results) {
+function sortPageRows(results, hidden) {
   return results.slice().sort((a, b) => {
-    const sd = statusRank(a.status) - statusRank(b.status)
+    const sd = statusRank(effectiveStatus(a, hidden)) - statusRank(effectiveStatus(b, hidden))
     if (sd !== 0) return sd
     return b.totalBytes - a.totalBytes
   })
@@ -41,14 +78,15 @@ function normalizePathKey(path) {
 }
 
 function allPageRows(state) {
+  const hidden = state.hiddenWarnings ?? new Set()
   if (state.burst?.active) {
-    return sortPageRows(state.burst.violations || [])
+    return sortPageRows(state.burst.violations || [], hidden)
   }
   if (!state.summary) return []
   if (!state.summary.results) return []
 
   const results = state.mode === 'violations'
-    ? state.summary.results.filter(page => page.status !== 'pass')
+    ? state.summary.results.filter(page => effectiveStatus(page, hidden) !== 'pass')
     : state.summary.results.slice()
 
   if (state.lastBatchPaths && state.lastBatchPaths.length > 0) {
@@ -57,12 +95,12 @@ function allPageRows(state) {
       const aChanged = changedSet.has(normalizePathKey(a.file)) ? 0 : 1
       const bChanged = changedSet.has(normalizePathKey(b.file)) ? 0 : 1
       if (aChanged !== bChanged) return aChanged - bChanged
-      const sd = statusRank(a.status) - statusRank(b.status)
+      const sd = statusRank(effectiveStatus(a, hidden)) - statusRank(effectiveStatus(b, hidden))
       if (sd !== 0) return sd
       return b.totalBytes - a.totalBytes
     })
   } else {
-    return sortPageRows(results)
+    return sortPageRows(results, hidden)
   }
   return results
 }
@@ -127,12 +165,13 @@ function frameHint(state, rows) {
   return hintLine(state)
 }
 
-export function formatPageRow(page, width, isSelected, useColor) {
+export function formatPageRow(page, width, isSelected, useColor, hidden = new Set()) {
   const statusOrder = { fail: '✗', warn: '⚠', pass: '✓' }
-  let sym = statusOrder[page.status] ?? '·'
+  const status = effectiveStatus(page, hidden)
+  let sym = statusOrder[status] ?? '·'
   if (useColor) {
-    if (page.status === 'fail') sym = red(sym, true)
-    else if (page.status === 'warn') sym = yellow(sym, true)
+    if (status === 'fail') sym = red(sym, true)
+    else if (status === 'warn') sym = yellow(sym, true)
     else sym = green(sym, true)
   }
 
@@ -153,10 +192,9 @@ export function formatPageRow(page, width, isSelected, useColor) {
 
 export function buildFrame(state, width, rows, useColor) {
   const lines = []
+  const hidden = state.hiddenWarnings ?? new Set()
 
-  const passCount = state.summary?.pass ?? 0
-  const warnCount = state.summary?.warn ?? 0
-  const failCount = state.summary?.fail ?? 0
+  const { pass: passCount, warn: warnCount, fail: failCount } = recount(state.summary?.results ?? [], hidden)
   const totalPages = state.summary?.pages ?? 0
 
   const passStr = useColor ? green(String(passCount), true) : String(passCount)
@@ -198,6 +236,23 @@ export function buildFrame(state, width, rows, useColor) {
 
   const pageRows = visiblePageRows(state, rows)
 
+  if (state.mode === 'filters') {
+    lines.push(trunc(' warning filters', width))
+    const cursor = state.filtersCursor ?? 0
+    for (let i = 0; i < ALL_WARNINGS.length; i++) {
+      const w = ALL_WARNINGS[i]
+      const isHidden = hidden.has(w.code)
+      const dot = isHidden
+        ? (useColor ? dim('○', true) : '○')
+        : (useColor ? yellow('●', true) : '●')
+      const prefix = i === cursor ? '>' : ' '
+      lines.push(trunc(`${prefix} ${dot}  ${w.code}  ${w.message}`, width))
+    }
+    lines.push(trunc('─'.repeat(width), width))
+    lines.push(trunc(' Space toggle · ↑↓ navigate · Esc close', width))
+    return lines
+  }
+
   if (state.mode === 'detail' && state.detailPageFile) {
     const detailPage = state.summary?.results.find(r => r.file === state.detailPageFile)
     lines.push(trunc(` detail: ${state.detailPageFile}`, width))
@@ -213,9 +268,10 @@ export function buildFrame(state, width, rows, useColor) {
       for (const [g, b] of Object.entries(groups)) {
         if (b > 0) lines.push(trunc(`   ${g.padEnd(10)} ${formatBytes(b)}`, width))
       }
-      if (detailPage.warnings.length > 0) {
-        for (const w of detailPage.warnings.slice(0, 3)) {
-          lines.push(trunc(`   ${w.code}  ${w.message}`, width))
+      const visibleWarnings = detailPage.warnings.filter(w => !state.hiddenWarnings.has(w.code))
+      if (visibleWarnings.length > 0) {
+        for (const w of visibleWarnings.slice(0, 3)) {
+          lines.push(trunc(`   ${w.message}`, width))
         }
       }
     }
@@ -263,7 +319,7 @@ export function buildFrame(state, width, rows, useColor) {
     } else {
       const clampedCursor = Math.max(0, Math.min(state.cursor, pageRows.length - 1))
       for (let i = 0; i < pageRows.length; i++) {
-        lines.push(formatPageRow(pageRows[i], width, i === clampedCursor, useColor))
+        lines.push(formatPageRow(pageRows[i], width, i === clampedCursor, useColor, hidden))
       }
     }
   }
@@ -273,8 +329,8 @@ export function buildFrame(state, width, rows, useColor) {
   const footer = state.mode === 'detail'
     ? ' Esc close | Q quit | R rebuild'
     : pageCount(state, rows) > 1
-      ? ' R rebuild | Q quit | ↑↓ navigate | ←→ page | Enter detail'
-      : ' R rebuild | Q quit | ↑↓ navigate | Enter detail'
+      ? ' R rebuild | Q quit | ↑↓ navigate | ←→ page | Enter detail · F filters'
+      : ' R rebuild | Q quit | ↑↓ navigate | Enter detail · F filters'
   lines.push(trunc(footer, width))
 
   return lines
@@ -312,6 +368,8 @@ export function startTui(state, onAction) {
     else if (key.name === 'right') onAction(ACTIONS.RIGHT)
     else if (key.name === 'return') onAction(ACTIONS.ENTER)
     else if (key.name === 'escape') onAction(ACTIONS.ESC)
+    else if (key.name === 'space') onAction(ACTIONS.SPACE)
+    else if (key.name === 'f') onAction(ACTIONS.FILTERS)
   }
 
   process.stdin.on('keypress', keypressHandler)
@@ -329,6 +387,11 @@ export function startTui(state, onAction) {
     renderTimer = setTimeout(doRepaint, 50)
   }
 
+  function renderNow() {
+    clearTimeout(renderTimer)
+    doRepaint()
+  }
+
   function stop() {
     clearTimeout(renderTimer)
     process.stdin.removeListener('keypress', keypressHandler)
@@ -337,5 +400,5 @@ export function startTui(state, onAction) {
     process.stdout.write('\x1b[?25h')
   }
 
-  return { render, stop }
+  return { render, renderNow, stop }
 }

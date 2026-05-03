@@ -154,9 +154,9 @@ describe('audit command', () => {
 })
 
 describe('--verbose flag', () => {
-  it('--verbose on warn-site shows E13 warning in output', async () => {
+  it('--verbose on warn-site shows warning in output', async () => {
     const { stdout } = await runCli(['--verbose', resolve(FIXTURES, 'warn-site')])
-    assert.ok(stdout.includes('E13'), 'verbose output should contain E13 code')
+    assert.ok(stdout.includes('⚠'), 'verbose output should contain warning symbol')
   })
 })
 

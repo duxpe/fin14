@@ -166,3 +166,43 @@ test('path traversal rejected — GET /../../etc/passwd is blocked', async () =>
     pool.close();
   }
 });
+
+test('POST /warnings/toggle — calls onToggleWarning and returns 200', async () => {
+  const pool = createSsePool();
+  let toggledCode = null;
+  const srv = await startServer(pool, mockState, {
+    onToggleWarning: (code) => { toggledCode = code; },
+  });
+  try {
+    function postToggle(port, body) {
+      return new Promise((resolve, reject) => {
+        const encoded = JSON.stringify(body);
+        const req = http.request({
+          hostname: '127.0.0.1',
+          port,
+          path: '/warnings/toggle',
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(encoded) },
+        }, (res) => {
+          res.resume();
+          res.on('end', () => resolve(res.statusCode));
+        });
+        req.on('error', reject);
+        req.write(encoded);
+        req.end();
+      });
+    }
+
+    const status = await postToggle(srv.port, { code: 'E14' });
+    assert.equal(status, 200);
+    assert.equal(toggledCode, 'E14');
+
+    toggledCode = null;
+    const statusNoCode = await postToggle(srv.port, {});
+    assert.equal(statusNoCode, 200);
+    assert.equal(toggledCode, null);
+  } finally {
+    await srv.close();
+    pool.close();
+  }
+});
