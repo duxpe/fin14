@@ -1,0 +1,131 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024" role="img" aria-labelledby="title desc">
+  <title id="title">fin14 logo</title>
+  <desc id="desc">A dark square logo with a geometric finch inside a measurement frame and the wordmark fin14.</desc>
+
+  <defs>
+    <radialGradient id="bg" cx="50%" cy="50%" r="70%">
+      <stop offset="0%" stop-color="#101923"/>
+      <stop offset="58%" stop-color="#060b12"/>
+      <stop offset="100%" stop-color="#02060b"/>
+    </radialGradient>
+
+    <linearGradient id="frame" x1="260" y1="200" x2="760" y2="610" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#9aa4ae" stop-opacity=".78"/>
+      <stop offset=".5" stop-color="#d3d9df" stop-opacity=".6"/>
+      <stop offset="1" stop-color="#717b86" stop-opacity=".85"/>
+    </linearGradient>
+
+    <linearGradient id="birdHead" x1="405" y1="315" x2="575" y2="535" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#e5e9ec"/>
+      <stop offset=".48" stop-color="#aeb7bf"/>
+      <stop offset="1" stop-color="#68727b"/>
+    </linearGradient>
+
+    <linearGradient id="birdBody" x1="325" y1="585" x2="585" y2="345" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#c8ced3"/>
+      <stop offset=".5" stop-color="#909aa2"/>
+      <stop offset="1" stop-color="#5f6972"/>
+    </linearGradient>
+
+    <linearGradient id="birdWing" x1="470" y1="460" x2="635" y2="555" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#313941"/>
+      <stop offset="1" stop-color="#111920"/>
+    </linearGradient>
+
+    <linearGradient id="wordFin" x1="305" y1="660" x2="540" y2="760" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset=".6" stop-color="#d8dde1"/>
+      <stop offset="1" stop-color="#8d969e"/>
+    </linearGradient>
+
+    <linearGradient id="word14" x1="540" y1="650" x2="720" y2="785" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#b4bcc4"/>
+      <stop offset="1" stop-color="#58626c"/>
+    </linearGradient>
+  </defs>
+
+  <rect width="1024" height="1024" fill="url(#bg)"/>
+
+  <!--
+    Export-safe notes:
+    - full 1024 x 1024 viewport, no cropped non-zero viewBox;
+    - no SVG filters/drop-shadows, so PNG export will not clip blur bounds;
+    - whole logo scaled with a transform instead of changing the viewBox;
+    - the "i" is now built as vector shapes (stem + square dot), so the green square
+      stays locked in place at any resolution.
+  -->
+  <g transform="translate(-129 -93) scale(1.25)">
+    <g fill="none" stroke="url(#frame)" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M313 285v-39q0-11 11-11h49"/>
+      <path d="M653 235h47q12 0 12 12v44"/>
+      <path d="M313 544v46q0 11 11 11h178"/>
+      <path d="M516 601h185q11 0 11-11v-42"/>
+      <path d="M512 216v23"/>
+      <path d="M512 590v36"/>
+    </g>
+
+    <path d="M393 231v9m25-9v9m25-9v9m25-9v9m25-9v9m44-9v9m25-9v9m25-9v9m25-9v9m25-9v9"
+          stroke="#9da7b1" stroke-width="3.5" stroke-linecap="square" opacity=".75" fill="none"/>
+
+    <g stroke-linecap="square" stroke-width="4" fill="none">
+      <path d="M313 310h11m-11 27h11" stroke="#82909a" opacity=".75"/>
+      <path d="M313 363h29" stroke="#10c979"/>
+      <path d="M313 390h12" stroke="#ffd21f"/>
+      <path d="M313 417h29" stroke="#ffc317"/>
+      <path d="M313 444h12" stroke="#ff3341"/>
+      <path d="M313 471h29" stroke="#ff3541"/>
+      <path d="M313 499h11m-11 27h11" stroke="#82909a" opacity=".7"/>
+    </g>
+
+    <g opacity=".8">
+      <path d="M712 306v229" stroke="#929da7" stroke-width="3.5" stroke-dasharray="7 11" stroke-linecap="round" fill="none"/>
+      <path d="m685 423 18-13v26Z" fill="#a0a9b1" opacity=".9"/>
+    </g>
+
+    <path d="m335 562 183-250q35-17 91 6l-76 192Z" fill="url(#birdBody)"/>
+    <path d="M518 312q29-21 66-11 32 9 47 39 10 21 4 50l-72 40Z" fill="url(#birdHead)"/>
+    <path d="m563 430 72-40q6 65-39 120h-63Z" fill="#56616a" opacity=".9"/>
+    <path d="m402 509 161-79-30 80H402Z" fill="url(#birdWing)" opacity=".98"/>
+    <path d="m631 340 39 23-39 23Z" fill="#8d969f"/>
+    <circle cx="575" cy="355" r="15" fill="#f0b933"/>
+    <circle cx="575" cy="355" r="12" fill="#071018"/>
+    <circle cx="581" cy="349" r="3.5" fill="#dfe7ed"/>
+    <path d="m335 562 183-250-116 198Z" fill="#bdc5cc" opacity=".24"/>
+
+    <text x="600" y="583"
+          fill="#9ba5ae"
+          font-family="ui-monospace, SFMono-Regular, Menlo, Consolas, monospace"
+          font-size="31"
+          letter-spacing="3"
+          opacity=".78">14kB</text>
+
+    <!-- Wordmark: "fin14"
+         The "i" is custom-built so the green square never drifts. -->
+    <g aria-label="fin14">
+      <text x="307" y="737"
+            fill="url(#wordFin)"
+            font-family="Inter, Arial, sans-serif"
+            font-size="142"
+            font-weight="300">f</text>
+
+      <!-- fixed custom "i" -->
+      <g>
+        <rect x="378" y="671" width="13" height="67" rx="2" ry="2" fill="url(#wordFin)"/>
+        <rect x="374.5" y="632" width="20" height="20" rx="1" ry="1" fill="#10c979"/>
+      </g>
+
+      <text x="409" y="737"
+            fill="url(#wordFin)"
+            font-family="Inter, Arial, sans-serif"
+            font-size="142"
+            font-weight="300">n</text>
+
+      <text x="536" y="737"
+            fill="url(#word14)"
+            font-family="Inter, Arial, sans-serif"
+            font-size="142"
+            font-weight="700"
+            letter-spacing="-8">14</text>
+    </g>
+  </g>
+</svg>
