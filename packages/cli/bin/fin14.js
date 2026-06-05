@@ -61,7 +61,7 @@ function parseArgv(argv) {
 
       if (!KNOWN_FLAGS.has(key)) {
         process.stderr.write('fin14: unknown option: --' + key + '\n')
-        process.exit(1)
+        process.exit(2)
       }
 
       if (key === 'config') {
@@ -71,7 +71,7 @@ function parseArgv(argv) {
           i++
           if (argv[i] === undefined || argv[i].startsWith('--')) {
             process.stderr.write('fin14: --config requires a path argument\n')
-            process.exit(1)
+            process.exit(2)
           }
           parsed.flags.config = argv[i]
         }
@@ -87,7 +87,7 @@ function parseArgv(argv) {
 
     if (arg.startsWith('-')) {
       process.stderr.write('fin14: unknown option: ' + arg + '\n')
-      process.exit(1)
+      process.exit(2)
     }
 
     if (!commandSet && KNOWN_COMMANDS.has(arg)) {
@@ -128,7 +128,7 @@ if (parsed.command === 'dev') {
   for (const flag of DEV_INVALID_FLAGS) {
     if (parsed.flags[flag]) {
       process.stderr.write('fin14: --' + flag + ' is not valid for the dev command\n')
-      process.exit(1)
+      process.exit(2)
     }
   }
 }

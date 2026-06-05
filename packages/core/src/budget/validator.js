@@ -1,14 +1,16 @@
 import { BYTES_PER_KB, STRICT_IPV6_LIMIT_BYTES } from '../constants.js'
+import { resolveBudget } from '../glob.js'
 
 export function validate(results, skipped, warnings, config, file) {
-  const limitBytes = config.budget.default
+  const limitBytes = resolveBudget(file, config)
+  const hasOverride = limitBytes !== config.budget.default
   const totalBytes = results.reduce((sum, r) => sum + r.bytes, 0)
   const overBudget = totalBytes > limitBytes
   const unknownBudget = warnings.some(w => w.code === 'E19')
 
   const newWarnings = [...warnings]
 
-  if (totalBytes > STRICT_IPV6_LIMIT_BYTES && !overBudget) {
+  if (totalBytes > STRICT_IPV6_LIMIT_BYTES && !overBudget && !hasOverride) {
     newWarnings.push({
       code: 'E13',
       message: `${file}: ${(totalBytes / BYTES_PER_KB).toFixed(1)}kB exceeds IPv6 heuristic (12.2kB)`,

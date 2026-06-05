@@ -2,12 +2,13 @@ export const BYTES_PER_KB = 1000
 export const MILLISECONDS_PER_SECOND = 1000
 
 export const DEFAULT_CONFIG = {
-  project: { output_dir: null, build_command: null },
+  project: { output_dir: null, build_command: null, include: [], exclude: [] },
   budget: {
     default: 14000,
     compression: 'gzip',
     compression_level: 6,
     cut_candidate_min_bytes: 2800,
+    overrides: [],
   },
   network: { timeout_ms: 5000, max_redirects: 5 },
   viewport: {

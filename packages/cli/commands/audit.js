@@ -54,12 +54,12 @@ export async function runAudit(parsed) {
   if (!parsed.flags.all) {
     if (!parsed.args[0]) {
       process.stderr.write('fin14 audit: no file specified\n')
-      process.exit(1)
+      process.exit(2)
     }
 
     if (!parsed.args[0].endsWith('.html')) {
       process.stderr.write('fin14 audit: file must be an .html file\n')
-      process.exit(1)
+      process.exit(2)
     }
 
     const absPath = resolve(process.cwd(), parsed.args[0])
@@ -69,7 +69,7 @@ export async function runAudit(parsed) {
     } catch (err) {
       if (err.code === 'ENOENT') {
         process.stderr.write('fin14 audit: file not found: ' + parsed.args[0] + '\n')
-        process.exit(1)
+        process.exit(2)
       }
       throw err
     }
@@ -79,7 +79,7 @@ export async function runAudit(parsed) {
       config = await loadConfig({ config: parsed.flags.config })
     } catch (err) {
       process.stderr.write(err.message + '\n')
-      process.exit(1)
+      process.exit(2)
     }
 
     if (config.project.output_dir === null) {
@@ -124,7 +124,7 @@ export async function runAudit(parsed) {
   const outputDir = parsed.args[0] ?? config.project.output_dir
   if (!outputDir) {
     process.stderr.write('fin14 audit: no output directory specified and none found in config\n')
-    process.exit(1)
+    process.exit(2)
   }
 
   let summary
@@ -133,14 +133,14 @@ export async function runAudit(parsed) {
   } catch (err) {
     if (err.code === 'ENOENT') {
       process.stderr.write('fin14 audit: directory not found: ' + outputDir + '\n')
-      process.exit(1)
+      process.exit(2)
     }
     throw err
   }
 
   if (summary.pages === 0) {
     process.stderr.write('error  no HTML files found in ' + outputDir + '\n')
-    process.exit(1)
+    process.exit(2)
   }
 
   for (let i = 0; i < summary.results.length; i++) {

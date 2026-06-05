@@ -1,7 +1,9 @@
 export { loadConfig } from './config.js'
 export { gzipLevelClampNotice } from './compress.js'
+export { matchGlob, filterPages, resolveBudget } from './glob.js'
 export * from './constants.js'
 import { collect } from './budget/collector.js'
+import { filterPages } from './glob.js'
 import { measure } from './budget/measurer.js'
 import { validate } from './budget/validator.js'
 import { crawl } from './crawler.js'
@@ -24,7 +26,7 @@ export async function measurePage(file, config) {
 
 export async function measureSite(outputDir, config, options = {}) {
   const configWithDir = { ...config, project: { ...config.project, output_dir: outputDir } }
-  const relPaths = await crawl(outputDir)
+  const relPaths = filterPages(await crawl(outputDir), configWithDir)
   const absPaths = relPaths.map(p => resolve(outputDir, p))
   const total = absPaths.length
 

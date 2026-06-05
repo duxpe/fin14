@@ -52,6 +52,6 @@ test('dev command rejects --force flag', async (t) => {
     proc.stderr.on('data', d => { err += d.toString() })
     proc.on('close', code => resolve([code, err]))
   })
-  assert.strictEqual(code, 1)
+  assert.strictEqual(code, 2)
   assert.ok(stderr.includes('--force'))
 })

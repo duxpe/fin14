@@ -7,6 +7,7 @@ import { mkdtemp, rm, writeFile, mkdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { createServer } from 'node:http'
+import { randomBytes } from 'node:crypto'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const FIXTURES = resolve(__dirname, 'fixtures')
@@ -107,23 +108,23 @@ describe('default command', () => {
     assert.equal(code, 1)
   })
 
-  it('nonexistent dir exits 1', async () => {
+  it('nonexistent dir exits 2', async () => {
     const code = await withExitTrap(() => runDefault({ args: ['/nonexistent/path/that/does/not/exist'], flags: { config: null, verbose: false, force: false, strict: false, build: false } }))
-    assert.equal(code, 1)
+    assert.equal(code, 2)
   })
 })
 
 import { runAudit } from '../commands/audit.js'
 
 describe('audit command', () => {
-  it('no args exits 1', async () => {
+  it('no args exits 2', async () => {
     const code = await withExitTrap(() => runAudit({ args: [], flags: { config: null, verbose: false, force: false, strict: false, all: false } }))
-    assert.equal(code, 1)
+    assert.equal(code, 2)
   })
 
-  it('nonexistent file exits 1', async () => {
+  it('nonexistent file exits 2', async () => {
     const code = await withExitTrap(() => runAudit({ args: ['/nonexistent/page.html'], flags: { config: null, verbose: false, force: false, strict: false, all: false } }))
-    assert.equal(code, 1)
+    assert.equal(code, 2)
   })
 
   it('pass-site/index.html exits 0 and prints audit header', async () => {
@@ -233,21 +234,21 @@ describe('E14 external resource strict behavior', () => {
 })
 
 describe('dev command invalid flags', () => {
-  it('dev --force exits 1 with error message', async () => {
+  it('dev --force exits 2 with error message', async () => {
     const { exitCode, stderr } = await runCli(['dev', '--force'])
-    assert.equal(exitCode, 1)
+    assert.equal(exitCode, 2)
     assert.ok(stderr.includes('--force'))
   })
 
-  it('dev --strict exits 1 with error message', async () => {
+  it('dev --strict exits 2 with error message', async () => {
     const { exitCode, stderr } = await runCli(['dev', '--strict'])
-    assert.equal(exitCode, 1)
+    assert.equal(exitCode, 2)
     assert.ok(stderr.includes('--strict'))
   })
 
-  it('dev --build exits 1 with error message', async () => {
+  it('dev --build exits 2 with error message', async () => {
     const { exitCode, stderr } = await runCli(['dev', '--build'])
-    assert.equal(exitCode, 1)
+    assert.equal(exitCode, 2)
     assert.ok(stderr.includes('--build'))
   })
 })
@@ -269,6 +270,51 @@ describe('output snapshots', () => {
   })
 })
 
+describe('page filtering and per-path budgets (e2e)', () => {
+  let dir
+  const bigBody = randomBytes(40000).toString('hex') // ~40 kB gzipped — over the 14 kB budget
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'fin14-glob-'))
+    await writeFile(join(dir, 'index.html'), '<html><body>hello</body></html>')
+    await mkdir(join(dir, 'gallery'), { recursive: true })
+    await writeFile(join(dir, 'gallery', 'index.html'), `<html><body>${bigBody}</body></html>`)
+  })
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true })
+  })
+
+  it('over-budget page fails (exit 1) with no config', async () => {
+    const { exitCode } = await runCli([dir])
+    assert.equal(exitCode, 1)
+  })
+
+  it('exclude drops the failing page (exit 0)', async () => {
+    await writeFile(join(dir, 'fin14.toml'), '[project]\nexclude = ["gallery/**"]\n')
+    const { exitCode } = await runCli(['--config', join(dir, 'fin14.toml'), dir])
+    assert.equal(exitCode, 0)
+  })
+
+  it('include allow-list measures only matched pages (exit 0)', async () => {
+    await writeFile(join(dir, 'fin14.toml'), '[project]\ninclude = ["index.html"]\n')
+    const { exitCode } = await runCli(['--config', join(dir, 'fin14.toml'), dir])
+    assert.equal(exitCode, 0)
+  })
+
+  it('per-path override raises the limit (exit 0)', async () => {
+    await writeFile(join(dir, 'fin14.toml'), '[[budget.overrides]]\npath = "gallery/**"\nbudget = "200kb"\n')
+    const { exitCode } = await runCli(['--config', join(dir, 'fin14.toml'), dir])
+    assert.equal(exitCode, 0)
+  })
+
+  it('malformed config exits 2', async () => {
+    await writeFile(join(dir, 'bad.toml'), '[project\n')
+    const { exitCode } = await runCli(['--config', join(dir, 'bad.toml'), dir])
+    assert.equal(exitCode, 2)
+  })
+})
+
 describe('bin smoke tests', () => {
   it('--help exits 0 and prints usage', async () => {
     const { exitCode, stdout } = await runCli(['--help'])
@@ -276,9 +322,9 @@ describe('bin smoke tests', () => {
     assert.ok(stdout.includes('fin14'))
   })
 
-  it('--unknown-flag exits 1', async () => {
+  it('--unknown-flag exits 2', async () => {
     const { exitCode, stderr } = await runCli(['--this-is-not-a-real-flag'])
-    assert.equal(exitCode, 1)
+    assert.equal(exitCode, 2)
     assert.ok(stderr.includes('unknown option'))
   })
 })
