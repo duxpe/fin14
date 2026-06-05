@@ -1,7 +1,7 @@
 import { BYTES_PER_KB, DEFAULT_CONFIG, loadConfig, measurePage, measureSite } from '@fin14/core'
 import { resolve, dirname } from 'node:path'
 import { stat } from 'node:fs/promises'
-import { formatBytes, statusSymbol, separator, formatWarning, formatCutCandidate, formatGroupLine, effectiveStatus, recount } from './format.js'
+import { formatBytes, statusSymbol, separator, formatWarning, formatCutCandidate, formatGroupLine, effectiveStatus, recount, printConfigNotices } from './format.js'
 
 function printAuditBlock(result, isTTY, excluded = new Set(), minBytes = 0) {
   const out = process.stdout.write.bind(process.stdout)
@@ -86,6 +86,8 @@ export async function runAudit(parsed) {
       config = { ...config, project: { ...config.project, output_dir: dirname(absPath) } }
     }
 
+    printConfigNotices(config)
+
     const excluded = new Set(config.warnings?.exclude ?? [])
     const minBytes = config.budget?.cut_candidate_min_bytes ?? DEFAULT_CONFIG.budget.cut_candidate_min_bytes
 
@@ -113,6 +115,8 @@ export async function runAudit(parsed) {
     process.stderr.write(err.message + '\n')
     process.exit(1)
   }
+
+  printConfigNotices(config)
 
   const excluded = new Set(config.warnings?.exclude ?? [])
   const minBytes = config.budget?.cut_candidate_min_bytes ?? DEFAULT_CONFIG.budget.cut_candidate_min_bytes

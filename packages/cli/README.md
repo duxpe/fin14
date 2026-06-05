@@ -70,7 +70,7 @@ build_command = "npm run build"
 [budget]
 default                  = "14kb"   # or integer bytes
 compression              = "gzip"   # or "brotli"
-compression_level        = 6        # 1–9, gzip only
+compression_level        = 6        # 0–11; gzip auto-clamps to 1–9
 cut_candidate_min_bytes  = 2800     # minimum bytes to appear in cut hints
 
 [network]
@@ -109,7 +109,7 @@ exclude = []                        # suppress warning codes, e.g. ["E14"]
 |---|---|---|
 | `default` | `"14kb"` | Budget per page as a string (`"14kb"`) or integer bytes |
 | `compression` | `"gzip"` | Compression algorithm: `"gzip"` or `"brotli"` |
-| `compression_level` | `6` | Compression level 1–9 (gzip only) |
+| `compression_level` | `6` | `0–11`. Brotli uses the full range; gzip auto-clamps to `1–9` (`0→1`, `10/11→9`) and prints a one-line notice |
 | `cut_candidate_min_bytes` | `2800` | Minimum uncompressed bytes for an asset to appear in cut hints |
 
 #### `[network]`

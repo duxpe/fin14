@@ -55,10 +55,6 @@ export function recordBuildTime(state, buildMs) {
   state.cycleCount++;
 }
 
-export function recordCycle(state, _ms) {
-  // no-op — settle is learned from build_command duration via recordBuildTime
-}
-
 export function pushActivity(state, entry) {
   state.activity.push(entry);
   if (state.activity.length > ACTIVITY_LIMIT) state.activity = state.activity.slice(-ACTIVITY_LIMIT);
@@ -96,17 +92,6 @@ export function recordBurstPage(state, page, done, total) {
 export function finishBurst(state) {
   state.burst.active = false;
   state.burst.stage = null;
-}
-
-export function clearBurst(state) {
-  state.burst = {
-    active: false,
-    stage: null,
-    changed: 0,
-    total: 0,
-    done: 0,
-    violations: [],
-  };
 }
 
 export function topOffenders(state) {

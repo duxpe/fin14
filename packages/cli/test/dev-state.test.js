@@ -5,7 +5,6 @@ import {
   beginBurst,
   computeSettleMs,
   finishBurst,
-  recordCycle,
   recordBuildTime,
   recordBurstPage,
   startBurstMeasure,
@@ -97,15 +96,6 @@ describe('computeSettleMs', () => {
     recordBuildTime(state, 400);
     const second = computeSettleMs(state);
     assert.equal(first, second, 'settle stable with identical build times');
-  });
-});
-
-describe('recordCycle', () => {
-  it('is a no-op (does not mutate state)', () => {
-    const state = createState('', {}, false);
-    recordCycle(state, 500);
-    assert.equal(state.cycleCount, 0);
-    assert.deepEqual(state.buildTimes, []);
   });
 });
 
