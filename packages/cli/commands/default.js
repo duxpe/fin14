@@ -19,7 +19,7 @@ export async function runDefault(parsed) {
     config = await loadConfig({ config: parsed.flags.config, outputDir: parsed.args[0] })
   } catch (err) {
     process.stderr.write(err.message + '\n')
-    process.exit(1)
+    process.exit(2)
   }
 
   printConfigNotices(config)
@@ -27,7 +27,7 @@ export async function runDefault(parsed) {
   const outputDir = parsed.args[0] ?? config.project.output_dir
   if (outputDir == null) {
     process.stderr.write('fin14: no output directory found\n')
-    process.exit(1)
+    process.exit(2)
   }
 
   let buildFailed = false
@@ -35,7 +35,7 @@ export async function runDefault(parsed) {
   if (parsed.flags.build) {
     if (!config.project.build_command) {
       process.stderr.write('fin14: --build requires build_command in fin14.toml\n')
-      process.exit(1)
+      process.exit(2)
     }
     const code = await runBuild(config.project.build_command)
     if (code !== 0) {
@@ -46,7 +46,7 @@ export async function runDefault(parsed) {
       } catch {}
       if (!dirExists) {
         process.stderr.write('fin14: build failed and output dir not found\n')
-        process.exit(1)
+        process.exit(2)
       }
       process.stderr.write('fin14: build failed — measuring stale output\n')
       buildFailed = true
@@ -64,7 +64,7 @@ export async function runDefault(parsed) {
     } else {
       process.stderr.write(err.message + '\n')
     }
-    process.exit(1)
+    process.exit(2)
   }
 
   if (buildFailed) {
@@ -77,7 +77,7 @@ export async function runDefault(parsed) {
 
   if (summary.pages === 0) {
     process.stderr.write('error  no HTML files found in ' + outputDir + '\n')
-    process.exit(1)
+    process.exit(2)
   }
 
   const counts = recount(summary.results, excluded)

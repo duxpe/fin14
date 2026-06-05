@@ -2,6 +2,21 @@
 
 All notable changes to fin14 and @fin14/core are documented here.
 
+## [Unreleased]
+
+### Added
+
+- Page filtering: `project.include` / `project.exclude` glob lists in `fin14.toml` to skip generated junk (404 pages, tag indexes, search shells). Globs support `*`, `**`, `?`. Explicitly named single-file audits are never filtered.
+- Per-page budgets: `[[budget.overrides]]` (`{ path, budget }`) with first-match-wins resolution; non-matching pages use `budget.default`.
+- Exit code `2` for config / input / tool errors (bad `fin14.toml`, missing output dir, no HTML files, unknown flag), distinct from `1` (budget / `--strict` failure). `0` unchanged.
+- `@fin14/core` exports `matchGlob`, `filterPages`, `resolveBudget`.
+- `docs/recipes.md` — per-SSG build + budget script recipes.
+
+### Changed
+
+- Pages with a `budget.overrides` match are exempt from the 12.2 kB IPv6 `--strict` warning (they opted into a larger envelope).
+- Config / input / tool errors now exit `2` instead of `1`.
+
 ## [0.1.0] - 2026-05-03
 
 ### Added

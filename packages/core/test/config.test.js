@@ -269,3 +269,61 @@ describe('type and range validation', () => {
 
   after(async () => { if (dir) await rm(dir, { recursive: true, force: true }) })
 })
+
+// ── include / exclude / per-path budgets ──────────────────────────────────────
+
+describe('include / exclude / budget.overrides', () => {
+  let dir
+
+  it('setup', async () => { dir = await mkdtemp(join(tmpdir(), 'fin14-globs-')) })
+
+  it('defaults: empty arrays', async () => {
+    const file = join(dir, 'empty.toml')
+    await writeFile(file, '')
+    const config = await loadConfig({ config: file })
+    assert.deepEqual(config.project.include, [])
+    assert.deepEqual(config.project.exclude, [])
+    assert.deepEqual(config.budget.overrides, [])
+  })
+
+  it('parses project.include and project.exclude', async () => {
+    const file = join(dir, 'globs.toml')
+    await writeFile(file, '[project]\ninclude = ["blog/**"]\nexclude = ["404.html", "tags/**"]\n')
+    const config = await loadConfig({ config: file })
+    assert.deepEqual(config.project.include, ['blog/**'])
+    assert.deepEqual(config.project.exclude, ['404.html', 'tags/**'])
+  })
+
+  it('parses budget.overrides with kB strings → bytes', async () => {
+    const file = join(dir, 'overrides.toml')
+    await writeFile(file, '[[budget.overrides]]\npath = "gallery/**"\nbudget = "20kb"\n')
+    const config = await loadConfig({ config: file })
+    assert.deepEqual(config.budget.overrides, [{ path: 'gallery/**', budget: 20000 }])
+  })
+
+  it('bad include type → E04', async () => {
+    const file = join(dir, 'bad-include.toml')
+    await writeFile(file, '[project]\ninclude = "blog/**"\n')
+    await assert.rejects(() => loadConfig({ config: file }), /E04:.*project\.include/)
+  })
+
+  it('override missing path → E04', async () => {
+    const file = join(dir, 'no-path.toml')
+    await writeFile(file, '[[budget.overrides]]\nbudget = "20kb"\n')
+    await assert.rejects(() => loadConfig({ config: file }), /E04:.*path/)
+  })
+
+  it('override bad budget value → E04', async () => {
+    const file = join(dir, 'bad-budget.toml')
+    await writeFile(file, '[[budget.overrides]]\npath = "x/**"\nbudget = "big"\n')
+    await assert.rejects(() => loadConfig({ config: file }), /budget\.overrides\[0\]\.budget/)
+  })
+
+  it('unknown override key → E04', async () => {
+    const file = join(dir, 'bad-key.toml')
+    await writeFile(file, '[[budget.overrides]]\npath = "x/**"\nbudget = "20kb"\nlimit = 1\n')
+    await assert.rejects(() => loadConfig({ config: file }), /E04:.*budget\.overrides\[0\]\.limit/)
+  })
+
+  after(async () => { if (dir) await rm(dir, { recursive: true, force: true }) })
+})

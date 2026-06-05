@@ -40,9 +40,9 @@ describe('npm pack smoke', () => {
     assert.ok(r.stdout.toString().includes('fin14'))
   })
 
-  it('packed bin: unknown flag exits 1', () => {
+  it('packed bin: unknown flag exits 2', () => {
     const r = spawnSync(bin(), ['--not-a-real-flag'])
-    assert.equal(r.status, 1)
+    assert.equal(r.status, 2)
   })
 
   it('packed bin: measures tiny site, exits 0', () => {

@@ -66,12 +66,18 @@ Create `fin14.toml` in your project root. All fields are optional.
 [project]
 output_dir    = "dist"
 build_command = "npm run build"
+include       = []                  # glob allow-list; empty = all HTML
+exclude       = ["404.html"]        # globs to skip
 
 [budget]
 default                  = "14kb"   # or integer bytes
 compression              = "gzip"   # or "brotli"
 compression_level        = 6        # 0–11; gzip auto-clamps to 1–9
 cut_candidate_min_bytes  = 2800     # minimum bytes to appear in cut hints
+
+[[budget.overrides]]                # per-page budgets; first match wins
+path   = "gallery/**/*.html"
+budget = "50kb"
 
 [network]
 timeout_ms    = 5000
@@ -102,6 +108,13 @@ exclude = []                        # suppress warning codes, e.g. ["E14"]
 |---|---|---|
 | `output_dir` | auto-detected | Directory containing built HTML files |
 | `build_command` | — | Shell command to build the site before measuring (used with `--build`) |
+| `include` | `[]` | Glob allow-list of pages to measure. Empty means all HTML. |
+| `exclude` | `[]` | Globs to skip (e.g. `["404.html", "tags/**"]`). `exclude` wins over `include`. |
+
+Globs support `*` (within a path segment), `**` (across segments), and `?`. Patterns
+match the page path relative to the output dir. Filtering applies to whole-site runs
+(`fin14 [dir]`, `fin14 audit --all`); an explicitly named single file
+(`fin14 audit page.html`) is always measured.
 
 #### `[budget]`
 
@@ -111,6 +124,22 @@ exclude = []                        # suppress warning codes, e.g. ["E14"]
 | `compression` | `"gzip"` | Compression algorithm: `"gzip"` or `"brotli"` |
 | `compression_level` | `6` | `0–11`. Brotli uses the full range; gzip auto-clamps to `1–9` (`0→1`, `10/11→9`) and prints a one-line notice |
 | `cut_candidate_min_bytes` | `2800` | Minimum uncompressed bytes for an asset to appear in cut hints |
+| `overrides` | `[]` | Array of `{ path, budget }` per-page budgets. First matching `path` glob wins; non-matching pages use `default`. |
+
+Per-page budgets via repeated `[[budget.overrides]]` tables:
+
+```toml
+[[budget.overrides]]
+path   = "blog/**/*.html"
+budget = "20kb"
+
+[[budget.overrides]]
+path   = "gallery/**/*.html"
+budget = "50kb"
+```
+
+A page covered by an override is exempt from the 12.2 kB IPv6 `--strict` warning — it
+has explicitly opted into a larger payload envelope.
 
 #### `[network]`
 
@@ -174,7 +203,8 @@ Warnings suppressed via `warnings.exclude` are not evaluated under `--strict`.
 | Code | Meaning |
 |---|---|
 | `0` | All pages pass (or `--force` used) |
-| `1` | Budget failure or `--strict` violation |
+| `1` | Budget failure or `--strict` violation (measurement ran) |
+| `2` | Config, input, or tool error — bad `fin14.toml`, missing output dir, no HTML files, unknown flag (measurement could not run) |
 
 ## Dev mode
 
@@ -231,6 +261,11 @@ jobs:
 With `--strict`, CI fails when any page (a) counts an external CDN resource toward the budget, (b) exceeds 12.2 kB (the IPv6 MTU heuristic), or (c) has an unknown budget because an external fetch failed. This catches regressions like a Google Fonts `<link>` quietly slipping into a page.
 
 Drop `--strict` to enforce only the 14 kB hard limit.
+
+## Recipes
+
+Per-SSG `package.json` scripts (Astro, Hugo, Eleventy, Jekyll, Next, SvelteKit, Nuxt,
+Zola, MkDocs, Docusaurus) are collected in [docs/recipes.md](../../docs/recipes.md).
 
 ## License
 

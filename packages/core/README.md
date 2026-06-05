@@ -104,7 +104,10 @@ Returns a `PageResult`:
 async function measureSite(outputDir, config, options = {})
 ```
 
-Discovers and measures all HTML pages under `outputDir`.
+Discovers and measures all HTML pages under `outputDir`, after applying
+`project.include` / `project.exclude` glob filters from the config. Each page is
+validated against its resolved budget (`budget.overrides` first-match, else
+`budget.default`).
 
 | Param | Type | Description |
 |---|---|---|
@@ -147,6 +150,18 @@ Returns a `SiteSummary`:
   results: PageResult[]
 }
 ```
+
+### Glob helpers
+
+```js
+import { matchGlob, filterPages, resolveBudget } from '@fin14/core';
+```
+
+| Function | Description |
+|---|---|
+| `matchGlob(path, pattern)` | Anchored glob match (`*`, `**`, `?`) against a posix path. |
+| `filterPages(relPaths, config)` | Applies `project.include` / `project.exclude` to a list of relative page paths. |
+| `resolveBudget(relFile, config)` | Returns the budget in bytes for a page — first matching `budget.overrides[].path`, else `budget.default`. |
 
 ## Types
 

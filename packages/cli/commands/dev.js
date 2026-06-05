@@ -35,7 +35,7 @@ export async function runDev(parsed) {
     config = await loadConfig({ config: parsed.flags.config, outputDir: parsed.args[0] })
   } catch (err) {
     process.stderr.write(err.message + '\n')
-    process.exit(1)
+    process.exit(2)
   }
 
   printConfigNotices(config)
@@ -43,7 +43,7 @@ export async function runDev(parsed) {
   const outputDir = parsed.args[0] ?? config.project?.output_dir
   if (!outputDir) {
     process.stderr.write('fin14: no output directory found\n')
-    process.exit(1)
+    process.exit(2)
   }
 
   const state = createState(outputDir, config, isTTY)
@@ -69,7 +69,7 @@ export async function runDev(parsed) {
     closeServer = server.close
   } catch (err) {
     process.stderr.write('fin14: failed to start server: ' + err.message + '\n')
-    process.exit(1)
+    process.exit(2)
   }
 
   const tui = startTui(state, handleAction)

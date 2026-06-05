@@ -20,11 +20,43 @@ async function detectOutputDir(cwd) {
 }
 
 const KNOWN_KEYS = {
-  project:  new Set(['output_dir', 'build_command']),
-  budget:   new Set(['default', 'compression', 'compression_level', 'cut_candidate_min_bytes']),
+  project:  new Set(['output_dir', 'build_command', 'include', 'exclude']),
+  budget:   new Set(['default', 'compression', 'compression_level', 'cut_candidate_min_bytes', 'overrides']),
   network:  new Set(['timeout_ms', 'max_redirects']),
   viewport: new Set(['default', 'mobile', 'desktop']),
   warnings: new Set(['exclude']),
+}
+
+const OVERRIDE_KEYS = new Set(['path', 'budget'])
+
+function validateGlobList(value, fieldPath) {
+  if (!Array.isArray(value) || !value.every(v => typeof v === 'string')) {
+    throw new Error(`E04: fin14.toml: ${fieldPath} must be an array of strings`)
+  }
+  return value
+}
+
+function parseBudgetOverrides(value) {
+  if (!Array.isArray(value)) {
+    throw new Error(`E04: fin14.toml: budget.overrides must be an array of { path, budget } tables`)
+  }
+  return value.map((entry, i) => {
+    if (typeof entry !== 'object' || entry === null || Array.isArray(entry)) {
+      throw new Error(`E04: fin14.toml: budget.overrides[${i}] must be a { path, budget } table`)
+    }
+    for (const key of Object.keys(entry)) {
+      if (!OVERRIDE_KEYS.has(key)) {
+        throw new Error(`E04: fin14.toml: unknown field 'budget.overrides[${i}].${key}'`)
+      }
+    }
+    if (typeof entry.path !== 'string') {
+      throw new Error(`E04: fin14.toml: budget.overrides[${i}].path: expected string`)
+    }
+    if (entry.budget === undefined) {
+      throw new Error(`E04: fin14.toml: budget.overrides[${i}].budget is required`)
+    }
+    return { path: entry.path, budget: parseBudgetDefault(entry.budget, `budget.overrides[${i}].budget`) }
+  })
 }
 
 const VIEWPORT_PRESET_KEYS = new Set(['width', 'height', 'lazy_visible_images'])
@@ -41,21 +73,21 @@ function assertInteger(value, fieldPath) {
   }
 }
 
-function parseBudgetDefault(value) {
+function parseBudgetDefault(value, fieldPath = 'budget.default') {
   if (typeof value === 'number') {
     if (!Number.isInteger(value)) {
-      throw new Error(`fin14.toml: budget.default: expected integer or "NNkb" string, got float`)
+      throw new Error(`fin14.toml: ${fieldPath}: expected integer or "NNkb" string, got float`)
     }
     return value
   }
   if (typeof value === 'string') {
     const match = value.match(/^(\d+(?:\.\d+)?)kb$/i)
     if (!match) {
-      throw new Error(`fin14.toml: budget.default: invalid value "${value}", expected integer or "NNkb" string`)
+      throw new Error(`fin14.toml: ${fieldPath}: invalid value "${value}", expected integer or "NNkb" string`)
     }
     return Math.round(parseFloat(match[1]) * BYTES_PER_KB)
   }
-  throw new Error(`fin14.toml: budget.default: expected integer or string, got ${typeof value}`)
+  throw new Error(`fin14.toml: ${fieldPath}: expected integer or string, got ${typeof value}`)
 }
 
 function validateViewportPreset(preset, name, userPreset) {
@@ -85,8 +117,8 @@ function validateViewportPreset(preset, name, userPreset) {
 
 function mergeConfig(user) {
   const result = {
-    project:  { ...DEFAULT_CONFIG.project },
-    budget:   { ...DEFAULT_CONFIG.budget },
+    project:  { ...DEFAULT_CONFIG.project, include: [...DEFAULT_CONFIG.project.include], exclude: [...DEFAULT_CONFIG.project.exclude] },
+    budget:   { ...DEFAULT_CONFIG.budget, overrides: [...DEFAULT_CONFIG.budget.overrides] },
     network:  { ...DEFAULT_CONFIG.network },
     viewport: {
       default: DEFAULT_CONFIG.viewport.default,
@@ -115,6 +147,12 @@ function mergeConfig(user) {
     if (user.project.build_command !== undefined) {
       assertType(user.project.build_command, 'string', 'project.build_command')
       result.project.build_command = user.project.build_command
+    }
+    if (user.project.include !== undefined) {
+      result.project.include = validateGlobList(user.project.include, 'project.include')
+    }
+    if (user.project.exclude !== undefined) {
+      result.project.exclude = validateGlobList(user.project.exclude, 'project.exclude')
     }
   }
 
@@ -146,6 +184,9 @@ function mergeConfig(user) {
         throw new Error(`E04: fin14.toml: budget.cut_candidate_min_bytes must be a non-negative integer`)
       }
       result.budget.cut_candidate_min_bytes = user.budget.cut_candidate_min_bytes
+    }
+    if (user.budget.overrides !== undefined) {
+      result.budget.overrides = parseBudgetOverrides(user.budget.overrides)
     }
   }
 
