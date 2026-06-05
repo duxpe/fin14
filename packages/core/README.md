@@ -92,7 +92,7 @@ Returns a `PageResult`:
   resources: ResourceResult[],
   cutCandidates: ResourceResult[],
   warnings: Warning[],
-  skipped: SkippedResource[]
+  skippedResources: SkippedResource[]
 }
 ```
 
@@ -155,9 +155,13 @@ Returns a `SiteSummary`:
 ```js
 {
   key: string,           // dedup key (absolute path or URL)
+  type: 'html' | 'css' | 'js' | 'image' | 'font',
   group: 'html' | 'css' | 'js' | 'images' | 'external',
-  bytes: number,         // compressed bytes
-  label: string          // display name
+  path: string,          // absolute path or URL
+  displayPath: string,   // path shown in output (relative to outputDir)
+  external: boolean,
+  inline: boolean,
+  bytes: number          // compressed bytes
 }
 ```
 

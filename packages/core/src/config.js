@@ -1,6 +1,6 @@
 import { readFile, access } from 'node:fs/promises'
 import { parse } from 'smol-toml'
-import { BYTES_PER_KB, DEFAULT_CONFIG } from './constants.js'
+import { BYTES_PER_KB, COMPRESSION_LEVEL_MAX, COMPRESSION_LEVEL_MIN, DEFAULT_CONFIG } from './constants.js'
 
 const SSG_DETECTORS = [
   { files: ['hugo.toml', 'hugo.yaml', 'hugo.json'],                                                dir: 'public' },
@@ -136,8 +136,8 @@ function mergeConfig(user) {
     }
     if (user.budget.compression_level !== undefined) {
       assertInteger(user.budget.compression_level, 'budget.compression_level')
-      if (user.budget.compression_level < 1 || user.budget.compression_level > 9) {
-        throw new Error(`fin14.toml: budget.compression_level: must be 1–9`)
+      if (user.budget.compression_level < COMPRESSION_LEVEL_MIN || user.budget.compression_level > COMPRESSION_LEVEL_MAX) {
+        throw new Error(`fin14.toml: budget.compression_level: must be ${COMPRESSION_LEVEL_MIN}–${COMPRESSION_LEVEL_MAX}`)
       }
       result.budget.compression_level = user.budget.compression_level
     }

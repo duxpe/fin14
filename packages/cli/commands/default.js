@@ -1,7 +1,7 @@
 import { BYTES_PER_KB, DEFAULT_CONFIG, loadConfig, measureSite } from '@fin14/core'
 import { spawn } from 'node:child_process'
 import { stat } from 'node:fs/promises'
-import { formatBytes, statusSymbol, formatWarning, formatCutCandidate, pageGroupSummary, green, effectiveStatus, recount } from './format.js'
+import { formatBytes, statusSymbol, formatWarning, formatCutCandidate, pageGroupSummary, green, effectiveStatus, recount, printConfigNotices } from './format.js'
 
 async function runBuild(command) {
   return new Promise((resolve) => {
@@ -21,6 +21,8 @@ export async function runDefault(parsed) {
     process.stderr.write(err.message + '\n')
     process.exit(1)
   }
+
+  printConfigNotices(config)
 
   const outputDir = parsed.args[0] ?? config.project.output_dir
   if (outputDir == null) {

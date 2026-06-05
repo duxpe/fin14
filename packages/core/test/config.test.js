@@ -235,9 +235,29 @@ describe('type and range validation', () => {
 
   it('setup', async () => { dir = await mkdtemp(join(tmpdir(), 'fin14-validation-')) })
 
-  it('compression_level = 10 → error', async () => {
-    const file = join(dir, 'comp-level.toml')
-    await writeFile(file, '[budget]\ncompression_level = 10\n')
+  it('compression_level = 11 → accepted', async () => {
+    const file = join(dir, 'comp-level-11.toml')
+    await writeFile(file, '[budget]\ncompression_level = 11\n')
+    const config = await loadConfig({ config: file })
+    assert.equal(config.budget.compression_level, 11)
+  })
+
+  it('compression_level = 0 → accepted', async () => {
+    const file = join(dir, 'comp-level-0.toml')
+    await writeFile(file, '[budget]\ncompression_level = 0\n')
+    const config = await loadConfig({ config: file })
+    assert.equal(config.budget.compression_level, 0)
+  })
+
+  it('compression_level = 12 → error', async () => {
+    const file = join(dir, 'comp-level-12.toml')
+    await writeFile(file, '[budget]\ncompression_level = 12\n')
+    await assert.rejects(() => loadConfig({ config: file }), /compression_level/)
+  })
+
+  it('compression_level = -1 → error', async () => {
+    const file = join(dir, 'comp-level-neg.toml')
+    await writeFile(file, '[budget]\ncompression_level = -1\n')
     await assert.rejects(() => loadConfig({ config: file }), /compression_level/)
   })
 

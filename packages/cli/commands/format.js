@@ -1,5 +1,10 @@
-import { BYTES_PER_KB } from '@fin14/core'
+import { BYTES_PER_KB, gzipLevelClampNotice } from '@fin14/core'
 import { CLI_SEPARATOR_WIDTH } from '../dev-server/constants.js'
+
+export function printConfigNotices(config) {
+  const notice = gzipLevelClampNotice(config.budget)
+  if (notice) process.stderr.write('fin14: ' + notice + '\n')
+}
 
 const RESET = '\x1b[0m'
 const BOLD = '\x1b[1m'

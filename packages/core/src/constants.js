@@ -18,6 +18,11 @@ export const DEFAULT_CONFIG = {
   warnings: { exclude: [] },
 }
 
+export const GZIP_MIN_LEVEL = 1
+export const GZIP_MAX_LEVEL = 9
+export const COMPRESSION_LEVEL_MIN = 0
+export const COMPRESSION_LEVEL_MAX = 11
+
 export const STRICT_IPV6_LIMIT_BYTES = 12200
 
 export const SITE_PAGE_BATCH_SIZE = 50

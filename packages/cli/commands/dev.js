@@ -17,6 +17,7 @@ import { startServer } from '../dev-server/server.js'
 import { createWatcher } from '../dev-server/watcher.js'
 import { startTui, ACTIONS, ALL_WARNINGS, pageCount, visiblePageRows } from '../dev-server/tui.js'
 import { MS_PER_SECOND, TUI_FALLBACK_ROWS } from '../dev-server/constants.js'
+import { printConfigNotices } from './format.js'
 
 function summaryPayload(summary, state, config) {
   return {
@@ -36,6 +37,8 @@ export async function runDev(parsed) {
     process.stderr.write(err.message + '\n')
     process.exit(1)
   }
+
+  printConfigNotices(config)
 
   const outputDir = parsed.args[0] ?? config.project?.output_dir
   if (!outputDir) {

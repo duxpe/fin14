@@ -1,4 +1,5 @@
 export { loadConfig } from './config.js'
+export { gzipLevelClampNotice } from './compress.js'
 export * from './constants.js'
 import { collect } from './budget/collector.js'
 import { measure } from './budget/measurer.js'
