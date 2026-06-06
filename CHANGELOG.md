@@ -11,6 +11,10 @@ All notable changes to fin14 and @fin14/core are documented here.
 - Exit code `2` for config / input / tool errors (bad `fin14.toml`, missing output dir, no HTML files, unknown flag), distinct from `1` (budget / `--strict` failure). `0` unchanged.
 - `@fin14/core` exports `matchGlob`, `filterPages`, `resolveBudget`.
 - `docs/recipes.md` — per-SSG build + budget script recipes.
+- `--json` — machine-readable report on stdout (schemaVersion 1, absolute paths stripped); suppresses the human report, exit codes unchanged.
+- GitHub annotations — `::error`/`::warning file=…` emitted automatically under `GITHUB_ACTIONS` (or `--github`); suppressed under `--json`.
+- `action.yml` — composite GitHub Action (`uses: duxpe/fin14@v1`) running `npx fin14` with `path`/`config`/`strict`/`version` inputs.
+- `--baseline <file.json>` — informational per-page size deltas vs a prior `--json` report (does not change exit code; missing file is non-fatal).
 
 ### Changed
 

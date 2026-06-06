@@ -1,7 +1,19 @@
 import { BYTES_PER_KB, DEFAULT_CONFIG, loadConfig, measureSite } from '@fin14/core'
 import { spawn } from 'node:child_process'
-import { stat } from 'node:fs/promises'
+import { stat, readFile } from 'node:fs/promises'
 import { formatBytes, statusSymbol, formatWarning, formatCutCandidate, pageGroupSummary, green, effectiveStatus, recount, printConfigNotices } from './format.js'
+import { toJsonReport, githubAnnotations, diffBaseline, formatBaselineDiff } from './reporters.js'
+
+async function loadBaselineDiff(path, summary) {
+  let report
+  try {
+    report = JSON.parse(await readFile(path, 'utf8'))
+  } catch (err) {
+    process.stderr.write('fin14: baseline skipped — ' + err.message + '\n')
+    return null
+  }
+  return diffBaseline(summary, report)
+}
 
 async function runBuild(command) {
   return new Promise((resolve) => {
@@ -80,6 +92,25 @@ export async function runDefault(parsed) {
     process.exit(2)
   }
 
+  let baselineDiff = null
+  if (parsed.flags.baseline) {
+    baselineDiff = await loadBaselineDiff(parsed.flags.baseline, summary)
+  }
+
+  const hasOverBudget = summary.results.some(r => r.overBudget)
+  const hasStrictFailure =
+    summary.results.some(r => r.warnings.some(w => w.strictFailure && !excluded.has(w.code))) ||
+    summary.siteWarnings.some(w => w.strictFailure && !excluded.has(w.code))
+
+  let shouldFail = false
+  if (hasOverBudget && !parsed.flags.force) shouldFail = true
+  if (hasStrictFailure && parsed.flags.strict) shouldFail = true
+
+  if (parsed.flags.json) {
+    process.stdout.write(JSON.stringify(toJsonReport(summary, baselineDiff), null, 2) + '\n')
+    process.exit(shouldFail ? 1 : 0)
+  }
+
   const counts = recount(summary.results, excluded)
   process.stdout.write(
     '  pass ' + counts.pass +
@@ -141,18 +172,19 @@ export async function runDefault(parsed) {
     }
   }
 
-  const hasOverBudget = summary.results.some(r => r.overBudget)
-  const hasStrictFailure =
-    summary.results.some(r => r.warnings.some(w => w.strictFailure && !excluded.has(w.code))) ||
-    summary.siteWarnings.some(w => w.strictFailure && !excluded.has(w.code))
+  if (baselineDiff) {
+    process.stdout.write('\n' + formatBaselineDiff(baselineDiff, isTTY) + '\n')
+  }
 
   if (hasOverBudget && !parsed.flags.force) {
     process.stdout.write('\n  Use --force to ignore budget failures.\n')
   }
 
-  let shouldFail = false
-  if (hasOverBudget && !parsed.flags.force) shouldFail = true
-  if (hasStrictFailure && parsed.flags.strict) shouldFail = true
+  if (process.env.GITHUB_ACTIONS === 'true' || parsed.flags.github) {
+    for (const line of githubAnnotations(summary, outputDir, excluded)) {
+      process.stdout.write(line + '\n')
+    }
+  }
 
   process.exit(shouldFail ? 1 : 0)
 }
