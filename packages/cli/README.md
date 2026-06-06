@@ -52,6 +52,7 @@ fin14 dev [dir]                # watch mode with live browser report
 |---|---|
 | `--json` | Print a machine-readable JSON report to stdout (suppresses the human report) |
 | `--baseline <path>` | Compare against a previous `--json` report and show per-page size deltas |
+| `--baseline-min-delta <bytes>` | Hide baseline deltas smaller than this (default `100`; overrides `budget.baseline_min_delta_bytes`) |
 | `--github` | Emit GitHub workflow annotations (auto-enabled when `GITHUB_ACTIONS=true`) |
 
 ## Auto-detection
@@ -82,6 +83,7 @@ default                  = "14kb"   # or integer bytes
 compression              = "gzip"   # or "brotli"
 compression_level        = 6        # 0–11; gzip auto-clamps to 1–9
 cut_candidate_min_bytes  = 2800     # minimum bytes to appear in cut hints
+baseline_min_delta_bytes = 100      # hide baseline deltas smaller than this
 
 [[budget.overrides]]                # per-page budgets; first match wins
 path   = "gallery/**/*.html"
@@ -132,6 +134,7 @@ match the page path relative to the output dir. Filtering applies to whole-site 
 | `compression` | `"gzip"` | Compression algorithm: `"gzip"` or `"brotli"` |
 | `compression_level` | `6` | `0–11`. Brotli uses the full range; gzip auto-clamps to `1–9` (`0→1`, `10/11→9`) and prints a one-line notice |
 | `cut_candidate_min_bytes` | `2800` | Minimum uncompressed bytes for an asset to appear in cut hints |
+| `baseline_min_delta_bytes` | `100` | Minimum gzipped delta (bytes) for a page to appear in a `--baseline` diff. The `--baseline-min-delta` flag overrides it. |
 | `overrides` | `[]` | Array of `{ path, budget }` per-page budgets. First matching `path` glob wins; non-matching pages use `default`. |
 
 Per-page budgets via repeated `[[budget.overrides]]` tables:
@@ -256,6 +259,17 @@ fin14 ./dist --baseline budget-baseline.json # later run: prints per-page deltas
 The comparison is **informational** — it prints `+`/`-` deltas (and added/removed pages)
 but does not change the exit code. A missing baseline file is non-fatal (warning, skipped),
 so the first run before a baseline exists still works.
+
+Deltas are measured on the **gzipped** `totalBytes`, and pages that moved less than
+`baseline_min_delta_bytes` (default `100`) are hidden so trivial noise does not clutter the
+report. A small source edit can compress to a sub-100-byte change — or to no change at all,
+since gzip works in blocks. Lower the threshold to surface finer changes:
+
+```bash
+fin14 ./dist --baseline budget-baseline.json --baseline-min-delta 0   # show every change
+```
+
+Or set it in `fin14.toml` (`budget.baseline_min_delta_bytes`); the flag wins when both are present.
 
 ## GitHub Action
 

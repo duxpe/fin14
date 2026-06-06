@@ -213,3 +213,7 @@ Compare each run against a stored report to catch size creep before it crosses t
 Generate the baseline once with `fin14 ./dist --json > budget-baseline.json` and commit
 it (or restore it from a cache/artifact). The `--baseline` comparison prints `+`/`-`
 deltas without failing the build; the hard 14 kB limit still fails via the normal run.
+
+Deltas are gzipped and pages moving less than `100` bytes are hidden by default. Tune with
+`--baseline-min-delta <bytes>` (e.g. `--baseline-min-delta 0` to show every change) or set
+`budget.baseline_min_delta_bytes` in `fin14.toml`.

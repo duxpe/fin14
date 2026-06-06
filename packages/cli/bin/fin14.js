@@ -4,9 +4,9 @@ import { runAudit } from '../commands/audit.js'
 import { DEV_PORT_START } from '../dev-server/constants.js'
 
 const KNOWN_COMMANDS = new Set(['check', 'audit', 'dev'])
-const KNOWN_FLAGS = new Set(['config', 'verbose', 'force', 'strict', 'build', 'all', 'help', 'json', 'github', 'baseline'])
-const DEV_INVALID_FLAGS = new Set(['force', 'strict', 'build', 'json', 'github', 'baseline'])
-const VALUE_FLAGS = new Set(['config', 'baseline'])
+const KNOWN_FLAGS = new Set(['config', 'verbose', 'force', 'strict', 'build', 'all', 'help', 'json', 'github', 'baseline', 'baseline-min-delta'])
+const DEV_INVALID_FLAGS = new Set(['force', 'strict', 'build', 'json', 'github', 'baseline', 'baseline-min-delta'])
+const VALUE_FLAGS = new Set(['config', 'baseline', 'baseline-min-delta'])
 
 function parseArgv(argv) {
   const parsed = {
@@ -23,6 +23,7 @@ function parseArgv(argv) {
       json: false,
       github: false,
       baseline: null,
+      'baseline-min-delta': null,
     },
   }
 
@@ -127,6 +128,7 @@ function printUsage() {
     'default / check flags:\n' +
     '  --json                  print a machine-readable JSON report to stdout\n' +
     '  --baseline <path>       compare against a previous --json report and show size deltas\n' +
+    '  --baseline-min-delta <bytes>  hide baseline deltas smaller than this (default 100)\n' +
     '  --github                emit GitHub workflow annotations (auto-enabled in GitHub Actions)\n'
   )
 }

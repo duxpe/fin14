@@ -8,6 +8,7 @@ export const DEFAULT_CONFIG = {
     compression: 'gzip',
     compression_level: 6,
     cut_candidate_min_bytes: 2800,
+    baseline_min_delta_bytes: 100,
     overrides: [],
   },
   network: { timeout_ms: 5000, max_redirects: 5 },

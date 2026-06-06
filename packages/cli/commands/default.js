@@ -4,7 +4,7 @@ import { stat, readFile } from 'node:fs/promises'
 import { formatBytes, statusSymbol, formatWarning, formatCutCandidate, pageGroupSummary, green, effectiveStatus, recount, printConfigNotices } from './format.js'
 import { toJsonReport, githubAnnotations, diffBaseline, formatBaselineDiff } from './reporters.js'
 
-async function loadBaselineDiff(path, summary) {
+async function loadBaselineDiff(path, summary, minDeltaBytes) {
   let report
   try {
     report = JSON.parse(await readFile(path, 'utf8'))
@@ -12,7 +12,20 @@ async function loadBaselineDiff(path, summary) {
     process.stderr.write('fin14: baseline skipped — ' + err.message + '\n')
     return null
   }
-  return diffBaseline(summary, report)
+  return diffBaseline(summary, report, minDeltaBytes)
+}
+
+function resolveBaselineMinDelta(parsed, config) {
+  const flag = parsed.flags['baseline-min-delta']
+  if (flag != null) {
+    const n = Number(flag)
+    if (!Number.isInteger(n) || n < 0) {
+      process.stderr.write('fin14: --baseline-min-delta requires a non-negative integer\n')
+      process.exit(2)
+    }
+    return n
+  }
+  return config.budget.baseline_min_delta_bytes
 }
 
 async function runBuild(command) {
@@ -94,7 +107,8 @@ export async function runDefault(parsed) {
 
   let baselineDiff = null
   if (parsed.flags.baseline) {
-    baselineDiff = await loadBaselineDiff(parsed.flags.baseline, summary)
+    const minDeltaBytes = resolveBaselineMinDelta(parsed, config)
+    baselineDiff = await loadBaselineDiff(parsed.flags.baseline, summary, minDeltaBytes)
   }
 
   const hasOverBudget = summary.results.some(r => r.overBudget)

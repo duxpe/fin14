@@ -380,6 +380,52 @@ describe('--json / annotations / --baseline (e2e)', () => {
     assert.equal(exitCode, 0)
     assert.ok(stderr.includes('baseline skipped'))
   })
+
+  async function baselineWithDelta(deltaBytes) {
+    const { stdout: jsonOut } = await runCli([dir, '--json'])
+    const report = JSON.parse(jsonOut)
+    const base = { schemaVersion: 1, results: report.results.map(r => ({ file: r.file, totalBytes: r.totalBytes - deltaBytes })) }
+    const basePath = join(dir, 'base.json')
+    await writeFile(basePath, JSON.stringify(base))
+    return basePath
+  }
+
+  it('default threshold (100) hides a sub-100-byte delta', async () => {
+    const basePath = await baselineWithDelta(50)
+    const { exitCode, stdout } = await runCli([dir, '--baseline', basePath])
+    assert.equal(exitCode, 0)
+    assert.ok(stdout.includes('no changes'))
+    assert.ok(!stdout.includes('index.html'))
+  })
+
+  it('--baseline-min-delta 0 surfaces the sub-100-byte delta', async () => {
+    const basePath = await baselineWithDelta(50)
+    const { exitCode, stdout } = await runCli([dir, '--baseline', basePath, '--baseline-min-delta', '0'])
+    assert.equal(exitCode, 0)
+    assert.ok(stdout.includes('index.html'))
+    assert.ok(stdout.includes('+'))
+  })
+
+  it('budget.baseline_min_delta_bytes hides a large delta; --baseline-min-delta overrides it', async () => {
+    const basePath = await baselineWithDelta(5000)
+    await writeFile(join(dir, 'fin14.toml'), '[budget]\nbaseline_min_delta_bytes = 100000\n')
+    const cfg = join(dir, 'fin14.toml')
+
+    const hidden = await runCli(['--config', cfg, dir, '--baseline', basePath])
+    assert.equal(hidden.exitCode, 0)
+    assert.ok(hidden.stdout.includes('no changes'))
+
+    const shown = await runCli(['--config', cfg, dir, '--baseline', basePath, '--baseline-min-delta', '0'])
+    assert.equal(shown.exitCode, 0)
+    assert.ok(shown.stdout.includes('index.html'))
+  })
+
+  it('--baseline-min-delta with a non-integer value exits 2', async () => {
+    const basePath = await baselineWithDelta(50)
+    const { exitCode, stderr } = await runCli([dir, '--baseline', basePath, '--baseline-min-delta', 'abc'])
+    assert.equal(exitCode, 2)
+    assert.ok(stderr.includes('baseline-min-delta'))
+  })
 })
 
 describe('bin smoke tests', () => {

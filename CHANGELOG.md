@@ -15,6 +15,7 @@ All notable changes to fin14 and @fin14/core are documented here.
 - GitHub annotations — `::error`/`::warning file=…` emitted automatically under `GITHUB_ACTIONS` (or `--github`); suppressed under `--json`.
 - `action.yml` — composite GitHub Action (`uses: duxpe/fin14@v1`) running `npx fin14` with `path`/`config`/`strict`/`version` inputs.
 - `--baseline <file.json>` — informational per-page size deltas vs a prior `--json` report (does not change exit code; missing file is non-fatal).
+- `--baseline-min-delta <bytes>` flag and `budget.baseline_min_delta_bytes` config key — tune the minimum gzipped delta shown in a baseline diff (default `100`; flag overrides config).
 
 ### Changed
 
