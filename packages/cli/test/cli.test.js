@@ -33,9 +33,9 @@ function captureStdout() {
   return { output: () => output, restore }
 }
 
-function runCli(args) {
+function runCli(args, opts = {}) {
   return new Promise((resolve) => {
-    const proc = spawn(process.execPath, [BIN, ...args], { stdio: ['ignore', 'pipe', 'pipe'] })
+    const proc = spawn(process.execPath, [BIN, ...args], { stdio: ['ignore', 'pipe', 'pipe'], env: { ...process.env, ...(opts.env ?? {}) } })
     let stdout = '', stderr = ''
     proc.stdout.on('data', d => stdout += d)
     proc.stderr.on('data', d => stderr += d)
@@ -312,6 +312,119 @@ describe('page filtering and per-path budgets (e2e)', () => {
     await writeFile(join(dir, 'bad.toml'), '[project\n')
     const { exitCode } = await runCli(['--config', join(dir, 'bad.toml'), dir])
     assert.equal(exitCode, 2)
+  })
+})
+
+describe('--json / annotations / --baseline (e2e)', () => {
+  let dir
+  const bigBody = randomBytes(40000).toString('hex')
+
+  beforeEach(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'fin14-report-'))
+    await writeFile(join(dir, 'index.html'), '<html><body>hello</body></html>')
+  })
+
+  afterEach(async () => {
+    await rm(dir, { recursive: true, force: true })
+  })
+
+  it('--json prints valid JSON, no human text, exit 0 on pass', async () => {
+    const { exitCode, stdout } = await runCli([dir, '--json'])
+    assert.equal(exitCode, 0)
+    assert.ok(!stdout.includes('✓'))
+    assert.ok(!stdout.includes('pass '))
+    const report = JSON.parse(stdout)
+    assert.equal(report.schemaVersion, 1)
+    assert.equal(report.pages, 1)
+    assert.equal(report.results[0].resources[0].path, undefined)
+  })
+
+  it('--json still exits 1 on over-budget', async () => {
+    await mkdir(join(dir, 'gallery'), { recursive: true })
+    await writeFile(join(dir, 'gallery', 'index.html'), `<html><body>${bigBody}</body></html>`)
+    const { exitCode, stdout } = await runCli([dir, '--json'])
+    assert.equal(exitCode, 1)
+    const report = JSON.parse(stdout)
+    assert.ok(report.fail >= 1)
+  })
+
+  it('GITHUB_ACTIONS env emits ::error annotations', async () => {
+    await mkdir(join(dir, 'gallery'), { recursive: true })
+    await writeFile(join(dir, 'gallery', 'index.html'), `<html><body>${bigBody}</body></html>`)
+    const { stdout } = await runCli([dir], { env: { GITHUB_ACTIONS: 'true' } })
+    assert.ok(stdout.includes('::error file='))
+  })
+
+  it('--json suppresses annotations even under GITHUB_ACTIONS', async () => {
+    await mkdir(join(dir, 'gallery'), { recursive: true })
+    await writeFile(join(dir, 'gallery', 'index.html'), `<html><body>${bigBody}</body></html>`)
+    const { stdout } = await runCli([dir, '--json'], { env: { GITHUB_ACTIONS: 'true' } })
+    assert.ok(!stdout.includes('::error'))
+    JSON.parse(stdout)
+  })
+
+  it('--baseline reports a delta and leaves exit code unchanged', async () => {
+    const { stdout: jsonOut } = await runCli([dir, '--json'])
+    const report = JSON.parse(jsonOut)
+    const base = { schemaVersion: 1, results: report.results.map(r => ({ file: r.file, totalBytes: r.totalBytes - 5000 })) }
+    const basePath = join(dir, 'base.json')
+    await writeFile(basePath, JSON.stringify(base))
+    const { exitCode, stdout } = await runCli([dir, '--baseline', basePath])
+    assert.equal(exitCode, 0)
+    assert.ok(stdout.includes('baseline'))
+    assert.ok(stdout.includes('+'))
+  })
+
+  it('missing baseline file is non-fatal', async () => {
+    const { exitCode, stderr } = await runCli([dir, '--baseline', join(dir, 'nope.json')])
+    assert.equal(exitCode, 0)
+    assert.ok(stderr.includes('baseline skipped'))
+  })
+
+  async function baselineWithDelta(deltaBytes) {
+    const { stdout: jsonOut } = await runCli([dir, '--json'])
+    const report = JSON.parse(jsonOut)
+    const base = { schemaVersion: 1, results: report.results.map(r => ({ file: r.file, totalBytes: r.totalBytes - deltaBytes })) }
+    const basePath = join(dir, 'base.json')
+    await writeFile(basePath, JSON.stringify(base))
+    return basePath
+  }
+
+  it('default threshold (100) hides a sub-100-byte delta', async () => {
+    const basePath = await baselineWithDelta(50)
+    const { exitCode, stdout } = await runCli([dir, '--baseline', basePath])
+    assert.equal(exitCode, 0)
+    assert.ok(stdout.includes('no changes'))
+    assert.ok(!stdout.includes('index.html'))
+  })
+
+  it('--baseline-min-delta 0 surfaces the sub-100-byte delta', async () => {
+    const basePath = await baselineWithDelta(50)
+    const { exitCode, stdout } = await runCli([dir, '--baseline', basePath, '--baseline-min-delta', '0'])
+    assert.equal(exitCode, 0)
+    assert.ok(stdout.includes('index.html'))
+    assert.ok(stdout.includes('+'))
+  })
+
+  it('budget.baseline_min_delta_bytes hides a large delta; --baseline-min-delta overrides it', async () => {
+    const basePath = await baselineWithDelta(5000)
+    await writeFile(join(dir, 'fin14.toml'), '[budget]\nbaseline_min_delta_bytes = 100000\n')
+    const cfg = join(dir, 'fin14.toml')
+
+    const hidden = await runCli(['--config', cfg, dir, '--baseline', basePath])
+    assert.equal(hidden.exitCode, 0)
+    assert.ok(hidden.stdout.includes('no changes'))
+
+    const shown = await runCli(['--config', cfg, dir, '--baseline', basePath, '--baseline-min-delta', '0'])
+    assert.equal(shown.exitCode, 0)
+    assert.ok(shown.stdout.includes('index.html'))
+  })
+
+  it('--baseline-min-delta with a non-integer value exits 2', async () => {
+    const basePath = await baselineWithDelta(50)
+    const { exitCode, stderr } = await runCli([dir, '--baseline', basePath, '--baseline-min-delta', 'abc'])
+    assert.equal(exitCode, 2)
+    assert.ok(stderr.includes('baseline-min-delta'))
   })
 })
 

@@ -62,6 +62,7 @@ describe('e2e: empty config uses all defaults', () => {
     assert.equal(config.budget.compression, DEFAULT_CONFIG.budget.compression)
     assert.equal(config.budget.compression_level, DEFAULT_CONFIG.budget.compression_level)
     assert.equal(config.budget.cut_candidate_min_bytes, DEFAULT_CONFIG.budget.cut_candidate_min_bytes)
+    assert.equal(config.budget.baseline_min_delta_bytes, DEFAULT_CONFIG.budget.baseline_min_delta_bytes)
     assert.equal(config.network.timeout_ms, DEFAULT_CONFIG.network.timeout_ms)
     assert.equal(config.network.max_redirects, DEFAULT_CONFIG.network.max_redirects)
     assert.equal(config.viewport.default, DEFAULT_CONFIG.viewport.default)
@@ -265,6 +266,32 @@ describe('type and range validation', () => {
     const file = join(dir, 'viewport.toml')
     await writeFile(file, '[viewport]\ndefault = "tablet"\n')
     await assert.rejects(() => loadConfig({ config: file }), /viewport\.default/)
+  })
+
+  it('baseline_min_delta_bytes = 0 → accepted', async () => {
+    const file = join(dir, 'baseline-0.toml')
+    await writeFile(file, '[budget]\nbaseline_min_delta_bytes = 0\n')
+    const config = await loadConfig({ config: file })
+    assert.equal(config.budget.baseline_min_delta_bytes, 0)
+  })
+
+  it('baseline_min_delta_bytes = 250 → accepted', async () => {
+    const file = join(dir, 'baseline-250.toml')
+    await writeFile(file, '[budget]\nbaseline_min_delta_bytes = 250\n')
+    const config = await loadConfig({ config: file })
+    assert.equal(config.budget.baseline_min_delta_bytes, 250)
+  })
+
+  it('baseline_min_delta_bytes = -1 → error', async () => {
+    const file = join(dir, 'baseline-neg.toml')
+    await writeFile(file, '[budget]\nbaseline_min_delta_bytes = -1\n')
+    await assert.rejects(() => loadConfig({ config: file }), /baseline_min_delta_bytes/)
+  })
+
+  it('baseline_min_delta_bytes = 1.5 → error', async () => {
+    const file = join(dir, 'baseline-float.toml')
+    await writeFile(file, '[budget]\nbaseline_min_delta_bytes = 1.5\n')
+    await assert.rejects(() => loadConfig({ config: file }), /baseline_min_delta_bytes/)
   })
 
   after(async () => { if (dir) await rm(dir, { recursive: true, force: true }) })

@@ -173,3 +173,47 @@ it has explicitly accepted a larger payload envelope.
 
 `2` lets CI distinguish "the site is over budget" from "fin14 could not run" — for
 example, fail the pipeline on `1` but treat `2` as a setup error to investigate.
+
+## GitHub Action
+
+```yaml
+name: Budget check
+on: [push, pull_request]
+
+jobs:
+  budget:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with: { node-version: 22 }
+      - run: npm ci && npm run build
+      - uses: duxpe/fin14@v1
+        with:
+          path: dist
+          strict: 'true'
+```
+
+The Action annotates offending files inline on the PR (`::error file=…`) and fails the
+job on exit `1`/`2`. To run fin14 directly instead of the Action, `npx fin14 ./dist`
+emits the same annotations automatically inside GitHub Actions.
+
+## Baseline / regression in CI
+
+Compare each run against a stored report to catch size creep before it crosses the limit:
+
+```yaml
+      - run: npm ci && npm run build
+      # produce the current report
+      - run: npx fin14 ./dist --json > budget.json
+      # compare against the committed baseline (informational)
+      - run: npx fin14 ./dist --baseline budget-baseline.json
+```
+
+Generate the baseline once with `fin14 ./dist --json > budget-baseline.json` and commit
+it (or restore it from a cache/artifact). The `--baseline` comparison prints `+`/`-`
+deltas without failing the build; the hard 14 kB limit still fails via the normal run.
+
+Deltas are gzipped and pages moving less than `100` bytes are hidden by default. Tune with
+`--baseline-min-delta <bytes>` (e.g. `--baseline-min-delta 0` to show every change) or set
+`budget.baseline_min_delta_bytes` in `fin14.toml`.

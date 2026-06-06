@@ -46,6 +46,15 @@ fin14 dev [dir]                # watch mode with live browser report
 | `--strict` | Fail on external resources, pages above 12.2 kB, or unknown budget |
 | `--build` | Run `build_command` from config before measuring |
 
+### Default command only
+
+| Flag | Description |
+|---|---|
+| `--json` | Print a machine-readable JSON report to stdout (suppresses the human report) |
+| `--baseline <path>` | Compare against a previous `--json` report and show per-page size deltas |
+| `--baseline-min-delta <bytes>` | Hide baseline deltas smaller than this (default `100`; overrides `budget.baseline_min_delta_bytes`) |
+| `--github` | Emit GitHub workflow annotations (auto-enabled when `GITHUB_ACTIONS=true`) |
+
 ## Auto-detection
 
 When no `fin14.toml` is present and no directory argument is given, fin14 detects the SSG from config files in the working directory:
@@ -74,6 +83,7 @@ default                  = "14kb"   # or integer bytes
 compression              = "gzip"   # or "brotli"
 compression_level        = 6        # 0–11; gzip auto-clamps to 1–9
 cut_candidate_min_bytes  = 2800     # minimum bytes to appear in cut hints
+baseline_min_delta_bytes = 100      # hide baseline deltas smaller than this
 
 [[budget.overrides]]                # per-page budgets; first match wins
 path   = "gallery/**/*.html"
@@ -124,6 +134,7 @@ match the page path relative to the output dir. Filtering applies to whole-site 
 | `compression` | `"gzip"` | Compression algorithm: `"gzip"` or `"brotli"` |
 | `compression_level` | `6` | `0–11`. Brotli uses the full range; gzip auto-clamps to `1–9` (`0→1`, `10/11→9`) and prints a one-line notice |
 | `cut_candidate_min_bytes` | `2800` | Minimum uncompressed bytes for an asset to appear in cut hints |
+| `baseline_min_delta_bytes` | `100` | Minimum gzipped delta (bytes) for a page to appear in a `--baseline` diff. The `--baseline-min-delta` flag overrides it. |
 | `overrides` | `[]` | Array of `{ path, budget }` per-page budgets. First matching `path` glob wins; non-matching pages use `default`. |
 
 Per-page budgets via repeated `[[budget.overrides]]` tables:
@@ -205,6 +216,76 @@ Warnings suppressed via `warnings.exclude` are not evaluated under `--strict`.
 | `0` | All pages pass (or `--force` used) |
 | `1` | Budget failure or `--strict` violation (measurement ran) |
 | `2` | Config, input, or tool error — bad `fin14.toml`, missing output dir, no HTML files, unknown flag (measurement could not run) |
+
+## JSON output
+
+`fin14 ./dist --json` prints a single JSON document to stdout and suppresses the human
+report. Exit codes are unchanged (`0`/`1`/`2`), so it stays CI-friendly. Absolute
+filesystem paths are stripped for portability — resources are identified by `displayPath`
+(relative to the output dir).
+
+```jsonc
+{
+  "schemaVersion": 1,
+  "generatedAt": "2026-06-05T12:00:00.000Z",
+  "outputDir": "dist",
+  "pages": 32, "pass": 30, "warn": 1, "fail": 1,
+  "totalBytes": 384210,
+  "results": [
+    {
+      "file": "about/index.html",
+      "status": "fail",
+      "totalBytes": 18432, "limitBytes": 14000,
+      "overBudget": true, "unknownBudget": false,
+      "warnings": [{ "code": "E14", "message": "...", "strictFailure": true }],
+      "resources": [{ "group": "html", "type": "html", "displayPath": "about/index.html", "bytes": 7200, "external": false, "inline": true }],
+      "cutCandidates": [{ "group": "images", "type": "image", "displayPath": "hero.jpg", "bytes": 9100 }]
+    }
+  ],
+  "topAssets": [/* heaviest resources site-wide */],
+  "siteWarnings": []
+}
+```
+
+## Baseline / regression
+
+Save a report, then compare a later run against it to see what grew or shrank:
+
+```bash
+fin14 ./dist --json > budget-baseline.json   # commit or upload as an artifact
+fin14 ./dist --baseline budget-baseline.json # later run: prints per-page deltas
+```
+
+The comparison is **informational** — it prints `+`/`-` deltas (and added/removed pages)
+but does not change the exit code. A missing baseline file is non-fatal (warning, skipped),
+so the first run before a baseline exists still works.
+
+Deltas are measured on the **gzipped** `totalBytes`, and pages that moved less than
+`baseline_min_delta_bytes` (default `100`) are hidden so trivial noise does not clutter the
+report. A small source edit can compress to a sub-100-byte change — or to no change at all,
+since gzip works in blocks. Lower the threshold to surface finer changes:
+
+```bash
+fin14 ./dist --baseline budget-baseline.json --baseline-min-delta 0   # show every change
+```
+
+Or set it in `fin14.toml` (`budget.baseline_min_delta_bytes`); the flag wins when both are present.
+
+## GitHub Action
+
+```yaml
+- uses: duxpe/fin14@v1
+  with:
+    path: dist        # output dir (default: dist)
+    strict: 'true'    # optional
+    config: fin14.toml # optional
+```
+
+The Action runs `fin14` and **annotates** offending files inline on the PR via
+`::error file=…` / `::warning file=…` workflow commands (auto-enabled because
+`GITHUB_ACTIONS` is set). The step fails on exit `1` (over budget / `--strict`) or `2`
+(config/tool error). Outside the Action, pass `--github` to force annotations. Annotations
+are suppressed under `--json` (which owns stdout).
 
 ## Dev mode
 

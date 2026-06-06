@@ -1,0 +1,33 @@
+name: fin14
+description: Validate static page weight against the 14 kB budget
+author: duxpe
+branding:
+  icon: bar-chart-2
+  color: green
+
+inputs:
+  path:
+    description: Output directory containing built HTML files
+    required: false
+    default: dist
+  config:
+    description: Path to fin14.toml
+    required: false
+  strict:
+    description: Fail on strict-mode warnings (external resources, near-limit pages, unknown budget)
+    required: false
+    default: 'false'
+  version:
+    description: fin14 npm version or dist-tag to run
+    required: false
+    default: latest
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: >-
+        npx --yes fin14@${{ inputs.version }}
+        "${{ inputs.path }}"
+        ${{ inputs.config && format('--config "{0}"', inputs.config) || '' }}
+        ${{ inputs.strict == 'true' && '--strict' || '' }}

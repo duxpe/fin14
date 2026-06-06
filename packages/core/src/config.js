@@ -21,7 +21,7 @@ async function detectOutputDir(cwd) {
 
 const KNOWN_KEYS = {
   project:  new Set(['output_dir', 'build_command', 'include', 'exclude']),
-  budget:   new Set(['default', 'compression', 'compression_level', 'cut_candidate_min_bytes', 'overrides']),
+  budget:   new Set(['default', 'compression', 'compression_level', 'cut_candidate_min_bytes', 'baseline_min_delta_bytes', 'overrides']),
   network:  new Set(['timeout_ms', 'max_redirects']),
   viewport: new Set(['default', 'mobile', 'desktop']),
   warnings: new Set(['exclude']),
@@ -184,6 +184,12 @@ function mergeConfig(user) {
         throw new Error(`E04: fin14.toml: budget.cut_candidate_min_bytes must be a non-negative integer`)
       }
       result.budget.cut_candidate_min_bytes = user.budget.cut_candidate_min_bytes
+    }
+    if (user.budget.baseline_min_delta_bytes !== undefined) {
+      if (!Number.isInteger(user.budget.baseline_min_delta_bytes) || user.budget.baseline_min_delta_bytes < 0) {
+        throw new Error(`E04: fin14.toml: budget.baseline_min_delta_bytes must be a non-negative integer`)
+      }
+      result.budget.baseline_min_delta_bytes = user.budget.baseline_min_delta_bytes
     }
     if (user.budget.overrides !== undefined) {
       result.budget.overrides = parseBudgetOverrides(user.budget.overrides)

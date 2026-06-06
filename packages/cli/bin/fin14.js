@@ -4,8 +4,9 @@ import { runAudit } from '../commands/audit.js'
 import { DEV_PORT_START } from '../dev-server/constants.js'
 
 const KNOWN_COMMANDS = new Set(['check', 'audit', 'dev'])
-const KNOWN_FLAGS = new Set(['config', 'verbose', 'force', 'strict', 'build', 'all', 'help'])
-const DEV_INVALID_FLAGS = new Set(['force', 'strict', 'build'])
+const KNOWN_FLAGS = new Set(['config', 'verbose', 'force', 'strict', 'build', 'all', 'help', 'json', 'github', 'baseline', 'baseline-min-delta'])
+const DEV_INVALID_FLAGS = new Set(['force', 'strict', 'build', 'json', 'github', 'baseline', 'baseline-min-delta'])
+const VALUE_FLAGS = new Set(['config', 'baseline', 'baseline-min-delta'])
 
 function parseArgv(argv) {
   const parsed = {
@@ -19,6 +20,10 @@ function parseArgv(argv) {
       build: false,
       all: false,
       help: false,
+      json: false,
+      github: false,
+      baseline: null,
+      'baseline-min-delta': null,
     },
   }
 
@@ -64,16 +69,16 @@ function parseArgv(argv) {
         process.exit(2)
       }
 
-      if (key === 'config') {
+      if (VALUE_FLAGS.has(key)) {
         if (value !== null) {
-          parsed.flags.config = value
+          parsed.flags[key] = value
         } else {
           i++
           if (argv[i] === undefined || argv[i].startsWith('--')) {
-            process.stderr.write('fin14: --config requires a path argument\n')
+            process.stderr.write('fin14: --' + key + ' requires a path argument\n')
             process.exit(2)
           }
-          parsed.flags.config = argv[i]
+          parsed.flags[key] = argv[i]
         }
       } else if (key === 'help') {
         parsed.flags.help = true
@@ -118,7 +123,13 @@ function printUsage() {
     'default / check / audit flags:\n' +
     '  --force                 exit 0 even on budget failures\n' +
     '  --strict                fail on strict-mode warnings (external resources, near-limit pages, unknown budget)\n' +
-    '  --build                 run build_command before measuring\n'
+    '  --build                 run build_command before measuring\n' +
+    '\n' +
+    'default / check flags:\n' +
+    '  --json                  print a machine-readable JSON report to stdout\n' +
+    '  --baseline <path>       compare against a previous --json report and show size deltas\n' +
+    '  --baseline-min-delta <bytes>  hide baseline deltas smaller than this (default 100)\n' +
+    '  --github                emit GitHub workflow annotations (auto-enabled in GitHub Actions)\n'
   )
 }
 
