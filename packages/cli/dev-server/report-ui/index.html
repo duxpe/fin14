@@ -107,6 +107,20 @@
   .map-btn.yellow { background: var(--yellow); }
   .map-btn.red { background: var(--red); }
 
+  .page-filter { display: flex; gap: 6px; margin-bottom: 12px; flex-wrap: wrap; }
+  .filter-tab {
+    padding: 4px 10px;
+    border: 1px solid var(--border);
+    border-radius: 4px;
+    background: var(--bg3);
+    color: var(--text-muted);
+    font-size: 12px;
+    cursor: pointer;
+  }
+  .filter-tab:hover { color: var(--text); }
+  .filter-tab.active { color: var(--text); border-color: var(--blue); background: var(--bg2); }
+  .filter-tab:focus { outline: 2px solid var(--blue); outline-offset: 1px; }
+
   .page-table { width: 100%; border-collapse: collapse; margin-bottom: 24px; font-size: 12px; }
   .page-table th { text-align: left; color: var(--text-muted); font-weight: 400; padding: 6px 10px; border-bottom: 1px solid var(--border); white-space: nowrap; }
   .page-table th.col-status { text-align: center; }
@@ -215,6 +229,11 @@
     <div class="budget-map" id="budget-map"></div>
 
     <div class="section-title">Pages</div>
+    <div class="page-filter" id="page-filter">
+      <button class="filter-tab active" data-filter="all" aria-pressed="true">All</button>
+      <button class="filter-tab" data-filter="violations" aria-pressed="false">Violations + warnings</button>
+      <button class="filter-tab" data-filter="budget" aria-pressed="false">Budget violations only</button>
+    </div>
     <table class="page-table" id="page-table">
       <thead>
         <tr>
@@ -259,6 +278,7 @@
   let lastSummary = null
   let filtersExpanded = false
   let cutCandidateMinBytes = 0
+  let pageFilter = 'all'
 
   const connDot = document.getElementById('conn-dot')
   const connLabel = document.getElementById('conn-label')
@@ -405,10 +425,21 @@
       return b.totalBytes - a.totalBytes
     })
 
+    const filtered = sorted.filter(page =>
+      pageFilter === 'violations' ? effectiveStatus(page) !== 'pass'
+      : pageFilter === 'budget' ? effectiveStatus(page) === 'fail'
+      : true)
+
     budgetMap.innerHTML = ''
     pageTbody.innerHTML = ''
 
-    sorted.forEach((page, i) => {
+    if (filtered.length === 0) {
+      const tr = document.createElement('tr')
+      tr.innerHTML = '<td colspan="5" class="col-file">No pages in this view.</td>'
+      pageTbody.appendChild(tr)
+    }
+
+    filtered.forEach((page, i) => {
       const btn = document.createElement('button')
       btn.className = 'map-btn ' + mapColor(page)
       const label = page.file + ' — ' + effectiveStatus(page) + ' — ' + fmt(page.totalBytes)
@@ -510,6 +541,18 @@
   panelClose.addEventListener('click', closePanel)
   document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape' && panel.classList.contains('open')) closePanel()
+  })
+
+  document.querySelectorAll('.filter-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      pageFilter = tab.dataset.filter
+      document.querySelectorAll('.filter-tab').forEach(t => {
+        const active = t === tab
+        t.classList.toggle('active', active)
+        t.setAttribute('aria-pressed', String(active))
+      })
+      if (lastSummary) renderSummary(lastSummary)
+    })
   })
 
   const es = new EventSource('/events')

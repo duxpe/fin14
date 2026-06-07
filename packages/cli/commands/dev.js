@@ -15,7 +15,7 @@ import {
 import { createSsePool } from '../dev-server/sse.js'
 import { startServer } from '../dev-server/server.js'
 import { createWatcher } from '../dev-server/watcher.js'
-import { startTui, ACTIONS, ALL_WARNINGS, pageCount, visiblePageRows } from '../dev-server/tui.js'
+import { startTui, ACTIONS, ALL_WARNINGS, pageCount, visiblePageRows, nextViewFilter } from '../dev-server/tui.js'
 import { MS_PER_SECOND, TUI_FALLBACK_ROWS } from '../dev-server/constants.js'
 import { printConfigNotices } from './format.js'
 
@@ -110,7 +110,7 @@ export async function runDev(parsed) {
       if (isBurst) {
         finishBurst(state)
         const violations = summary.results.filter(page => page.status !== 'pass')
-        state.mode = violations.length > 0 ? 'violations' : 'pages'
+        state.viewFilter = violations.length > 0 ? 'violations' : 'all'
         state.page = 0
         state.cursor = 0
       }
@@ -209,6 +209,14 @@ export async function runDev(parsed) {
     if (action === ACTIONS.FILTERS) {
       state.mode = state.mode === 'filters' ? 'pages' : 'filters'
       state.filtersCursor = 0
+      tui.renderNow()
+      return
+    }
+    if (action === ACTIONS.CYCLE_VIEW) {
+      if (state.mode === 'detail' || state.mode === 'filters') return
+      state.viewFilter = nextViewFilter(state.viewFilter ?? 'all')
+      state.page = 0
+      state.cursor = 0
       tui.renderNow()
       return
     }
