@@ -21,6 +21,20 @@ export const ACTIONS = {
   ESC: 'esc',
   SPACE: 'space',
   FILTERS: 'filters',
+  CYCLE_VIEW: 'cycleView',
+}
+
+export const VIEW_FILTERS = ['all', 'violations', 'budget']
+
+export function nextViewFilter(current) {
+  const i = VIEW_FILTERS.indexOf(current)
+  return VIEW_FILTERS[(i + 1) % VIEW_FILTERS.length]
+}
+
+const VIEW_LABELS = {
+  all: 'all pages',
+  violations: 'violations + warnings',
+  budget: 'budget violations only',
 }
 
 export const ALL_WARNINGS = [
@@ -44,6 +58,12 @@ function effectiveStatus(page, hidden) {
     return warnings.every(w => hidden.has(w.code)) ? 'pass' : 'warn'
   }
   return page.status
+}
+
+function filterByView(results, viewFilter, hidden) {
+  if (viewFilter === 'violations') return results.filter(p => effectiveStatus(p, hidden) !== 'pass')
+  if (viewFilter === 'budget') return results.filter(p => effectiveStatus(p, hidden) === 'fail')
+  return results.slice()
 }
 
 function recount(results, hidden) {
@@ -90,9 +110,7 @@ function allPageRows(state) {
   if (!state.summary) return []
   if (!state.summary.results) return []
 
-  const results = state.mode === 'violations'
-    ? state.summary.results.filter(page => effectiveStatus(page, hidden) !== 'pass')
-    : state.summary.results.slice()
+  const results = filterByView(state.summary.results, state.viewFilter ?? 'all', hidden)
 
   if (state.lastBatchPaths && state.lastBatchPaths.length > 0) {
     const changedSet = new Set(state.lastBatchPaths.map(normalizePathKey))
@@ -158,13 +176,14 @@ function frameHint(state, rows) {
     return `updating ${total} pages...  [${progressBar(done, total)}]  ${done} / ${total}`
   }
 
-  if (state.mode === 'violations') {
+  if (state.viewFilter && state.viewFilter !== 'all') {
     const count = allPageRows(state).length
+    const total = state.summary?.pages ?? count
     const pages = pageCount(state, rows)
     const current = Math.max(0, Math.min(state.page || 0, pages - 1)) + 1
     return pages > 1
-      ? `${count} page${count === 1 ? '' : 's'} with violations — page ${current} / ${pages}  ← →`
-      : `${count} page${count === 1 ? '' : 's'} with violations`
+      ? `${count} of ${total} pages — page ${current}/${pages} ← →`
+      : `${count} of ${total} pages`
   }
 
   return hintLine(state)
@@ -223,6 +242,9 @@ export function buildFrame(state, width, rows, useColor) {
   let line1 = ` report http://localhost:${state.port}`
   if (state.status === 'settling' || state.status === 'measuring') {
     line1 += `    settle ${state.currentSettleMs}ms`
+  }
+  if (state.summary) {
+    line1 += `    view: ${VIEW_LABELS[state.viewFilter ?? 'all']}`
   }
   lines.push(trunc(line1, width))
 
@@ -305,21 +327,26 @@ export function buildFrame(state, width, rows, useColor) {
         lines.push(trunc(footer, width))
         return lines
       }
-      const recentActivity = state.activity.slice(-activitySlots)
-      for (let i = 0; i < activitySlots; i++) {
-        const entry = recentActivity[i]
-        if (!entry) { lines.push(''); continue }
-        let line
-        if (entry.type === 'measure') {
-          line = useColor ? green('  ✓  ' + entry.message, true) : '  ✓  ' + entry.message
-        } else if (entry.type === 'rebuild') {
-          line = useColor ? dim('  ↺  ' + entry.message, true) : '  ↺  ' + entry.message
-        } else if (entry.type === 'error') {
-          line = useColor ? red('  ✗  ' + entry.message, true) : '  ✗  ' + entry.message
-        } else {
-          line = useColor ? dim('  ·  ' + entry.message, true) : '  ·  ' + entry.message
+      if (state.viewFilter && state.viewFilter !== 'all') {
+        lines.push(trunc('  no pages in this view', width))
+        for (let i = 1; i < activitySlots; i++) lines.push('')
+      } else {
+        const recentActivity = state.activity.slice(-activitySlots)
+        for (let i = 0; i < activitySlots; i++) {
+          const entry = recentActivity[i]
+          if (!entry) { lines.push(''); continue }
+          let line
+          if (entry.type === 'measure') {
+            line = useColor ? green('  ✓  ' + entry.message, true) : '  ✓  ' + entry.message
+          } else if (entry.type === 'rebuild') {
+            line = useColor ? dim('  ↺  ' + entry.message, true) : '  ↺  ' + entry.message
+          } else if (entry.type === 'error') {
+            line = useColor ? red('  ✗  ' + entry.message, true) : '  ✗  ' + entry.message
+          } else {
+            line = useColor ? dim('  ·  ' + entry.message, true) : '  ·  ' + entry.message
+          }
+          lines.push(trunc(line, width))
         }
-        lines.push(trunc(line, width))
       }
     } else {
       const clampedCursor = Math.max(0, Math.min(state.cursor, pageRows.length - 1))
@@ -331,11 +358,13 @@ export function buildFrame(state, width, rows, useColor) {
 
   lines.push(trunc('─'.repeat(width), width))
 
-  const footer = state.mode === 'detail'
-    ? ' Esc close | Q quit | R rebuild'
-    : pageCount(state, rows) > 1
-      ? ' R rebuild | Q quit | ↑↓ navigate | ←→ page | Enter detail · F filters'
-      : ' R rebuild | Q quit | ↑↓ navigate | Enter detail · F filters'
+  let footer
+  if (state.mode === 'detail') {
+    footer = ' Esc close | Q quit | R rebuild'
+  } else {
+    const pageSeg = pageCount(state, rows) > 1 ? ' ←→ page |' : ''
+    footer = ` R rebuild | Q quit | ↑↓ navigate |${pageSeg} Enter detail · F filters · Shift+Tab to switch view`
+  }
   lines.push(trunc(footer, width))
 
   return lines
@@ -375,6 +404,7 @@ export function startTui(state, onAction) {
     else if (key.name === 'escape') onAction(ACTIONS.ESC)
     else if (key.name === 'space') onAction(ACTIONS.SPACE)
     else if (key.name === 'f') onAction(ACTIONS.FILTERS)
+    else if (key.name === 'tab' && key.shift) onAction(ACTIONS.CYCLE_VIEW)
   }
 
   process.stdin.on('keypress', keypressHandler)

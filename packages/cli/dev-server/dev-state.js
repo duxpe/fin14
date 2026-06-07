@@ -27,6 +27,7 @@ export function createState(outputDir, config, isTTY) {
     activity: [],
     cursor: 0,
     mode: 'pages',
+    viewFilter: 'all',
     page: 0,
     lastBatchPaths: [],
     detailPageFile: null,

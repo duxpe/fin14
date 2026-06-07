@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { createState, pushActivity } from '../dev-server/dev-state.js'
-import { startTui, ACTIONS, buildFrame, visiblePageRows, pageCount, formatPageRow, paintFrame } from '../dev-server/tui.js'
+import { startTui, ACTIONS, buildFrame, visiblePageRows, pageCount, formatPageRow, paintFrame, nextViewFilter, VIEW_FILTERS } from '../dev-server/tui.js'
 
 function makeState(overrides = {}) {
   const state = createState('/tmp/dist', {}, false)
@@ -23,6 +23,16 @@ describe('ACTIONS', () => {
     assert.equal(ACTIONS.ESC, 'esc')
     assert.equal(ACTIONS.SPACE, 'space')
     assert.equal(ACTIONS.FILTERS, 'filters')
+    assert.equal(ACTIONS.CYCLE_VIEW, 'cycleView')
+  })
+})
+
+describe('nextViewFilter', () => {
+  it('cycles all → violations → budget → all', () => {
+    assert.deepEqual(VIEW_FILTERS, ['all', 'violations', 'budget'])
+    assert.equal(nextViewFilter('all'), 'violations')
+    assert.equal(nextViewFilter('violations'), 'budget')
+    assert.equal(nextViewFilter('budget'), 'all')
   })
 })
 
@@ -297,8 +307,8 @@ describe('buildFrame', () => {
     assert.ok(!joined.includes('good.html'), `burst should not show passing rows: ${joined}`)
   })
 
-  it('shows violation pagination hint when in violations mode', () => {
-    const state = makeState({ mode: 'violations', page: 1 })
+  it('shows paginated view-filter hint when filtered', () => {
+    const state = makeState({ viewFilter: 'violations', page: 1 })
     state.summary = {
       topAssets: [], pass: 0, warn: 20, fail: 0, pages: 20,
       results: Array.from({ length: 20 }, (_, i) => ({
@@ -306,8 +316,65 @@ describe('buildFrame', () => {
       })),
     }
     const joined = buildFrame(state, WIDTH, 12, false).join('\n')
-    assert.ok(joined.includes('page 2 /'), `missing page indicator: ${joined}`)
+    assert.ok(joined.includes('view: violations + warnings'), `missing header view label: ${joined}`)
+    assert.ok(joined.includes('page 2/'), `missing page indicator: ${joined}`)
     assert.ok(joined.includes('← →'), `missing page arrows: ${joined}`)
+  })
+
+  it('header shows the active view label and hint shows the count', () => {
+    const state = makeState({ viewFilter: 'violations' })
+    state.summary = {
+      topAssets: [], pass: 5, warn: 0, fail: 1, pages: 6,
+      results: [
+        { file: 'observatory.html', totalBytes: 17000, limitBytes: 14000, status: 'fail', resources: [], warnings: [] },
+        ...Array.from({ length: 5 }, (_, i) => ({
+          file: `ok-${i}.html`, totalBytes: 5000, limitBytes: 14000, status: 'pass', resources: [], warnings: [],
+        })),
+      ],
+    }
+    const lines = buildFrame(state, WIDTH, ROWS, false)
+    assert.ok(lines[1].includes('view: violations + warnings'), `header: ${lines[1]}`)
+    const hintLine = lines.find(l => l.includes('hint'))
+    assert.ok(hintLine.includes('1 of 6 pages'), `hint: ${hintLine}`)
+  })
+
+  it('header shows view: all pages in the default view', () => {
+    const state = makeState()
+    state.summary = {
+      topAssets: [], pass: 2, warn: 0, fail: 0, pages: 2,
+      results: [
+        { file: 'a.html', totalBytes: 5000, limitBytes: 14000, status: 'pass', resources: [], warnings: [] },
+        { file: 'b.html', totalBytes: 6000, limitBytes: 14000, status: 'pass', resources: [], warnings: [] },
+      ],
+    }
+    const lines = buildFrame(state, WIDTH, ROWS, false)
+    assert.ok(lines[1].includes('view: all pages'), `header: ${lines[1]}`)
+  })
+
+  it('footer advertises the Shift+Tab switch-view hint in list view', () => {
+    const state = makeState()
+    state.summary = {
+      topAssets: [], pass: 2, warn: 0, fail: 0, pages: 2,
+      results: [
+        { file: 'a.html', totalBytes: 5000, limitBytes: 14000, status: 'pass', resources: [], warnings: [] },
+        { file: 'b.html', totalBytes: 6000, limitBytes: 14000, status: 'pass', resources: [], warnings: [] },
+      ],
+    }
+    const footer = buildFrame(state, 120, ROWS, false).slice(-1)[0]
+    assert.ok(footer.includes('Shift+Tab to switch view'), `footer: ${footer}`)
+  })
+
+  it('budget view with no failures shows an empty-view message', () => {
+    const state = makeState({ viewFilter: 'budget' })
+    state.summary = {
+      topAssets: [], pass: 2, warn: 0, fail: 0, pages: 2,
+      results: [
+        { file: 'a.html', totalBytes: 5000, limitBytes: 14000, status: 'pass', resources: [], warnings: [] },
+        { file: 'b.html', totalBytes: 6000, limitBytes: 14000, status: 'pass', resources: [], warnings: [] },
+      ],
+    }
+    const joined = buildFrame(state, WIDTH, ROWS, false).join('\n')
+    assert.ok(joined.includes('no pages in this view'), `frame: ${joined}`)
   })
 })
 
@@ -373,8 +440,8 @@ describe('visiblePageRows', () => {
     assert.equal(rows[0].file, 'blog/b.html')
   })
 
-  it('returns only violations in violations mode', () => {
-    const state = makeState({ mode: 'violations' })
+  it('returns fail + warn in violations view', () => {
+    const state = makeState({ viewFilter: 'violations' })
     state.summary = {
       topAssets: [], pass: 1, warn: 1, fail: 1, pages: 3,
       results: [
@@ -385,6 +452,34 @@ describe('visiblePageRows', () => {
     }
     const rows = visiblePageRows(state, 24)
     assert.deepEqual(rows.map(r => r.status), ['fail', 'warn'])
+  })
+
+  it('returns only failures in budget view', () => {
+    const state = makeState({ viewFilter: 'budget' })
+    state.summary = {
+      topAssets: [], pass: 1, warn: 1, fail: 1, pages: 3,
+      results: [
+        { file: 'pass.html', totalBytes: 5000, limitBytes: 14000, status: 'pass', resources: [], warnings: [] },
+        { file: 'warn.html', totalBytes: 6000, limitBytes: 14000, status: 'warn', resources: [], warnings: [] },
+        { file: 'fail.html', totalBytes: 15000, limitBytes: 14000, status: 'fail', resources: [], warnings: [] },
+      ],
+    }
+    const rows = visiblePageRows(state, 24)
+    assert.deepEqual(rows.map(r => r.status), ['fail'])
+  })
+
+  it('returns all pages in all view', () => {
+    const state = makeState({ viewFilter: 'all' })
+    state.summary = {
+      topAssets: [], pass: 1, warn: 1, fail: 1, pages: 3,
+      results: [
+        { file: 'pass.html', totalBytes: 5000, limitBytes: 14000, status: 'pass', resources: [], warnings: [] },
+        { file: 'warn.html', totalBytes: 6000, limitBytes: 14000, status: 'warn', resources: [], warnings: [] },
+        { file: 'fail.html', totalBytes: 15000, limitBytes: 14000, status: 'fail', resources: [], warnings: [] },
+      ],
+    }
+    const rows = visiblePageRows(state, 24)
+    assert.equal(rows.length, 3)
   })
 
   it('uses state.page to paginate visible rows', () => {
