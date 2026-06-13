@@ -1,6 +1,7 @@
 export { loadConfig } from './config.js'
 export { gzipLevelClampNotice } from './compress.js'
 export { matchGlob, filterPages, resolveBudget } from './glob.js'
+export { resolveIgnoreGlobs, applyIgnore, applyIgnoreToPage, applyIgnoreToSummary } from './ignore.js'
 export * from './constants.js'
 import { collect } from './budget/collector.js'
 import { filterPages } from './glob.js'

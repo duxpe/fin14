@@ -17,8 +17,13 @@ export const SYSTEMIC_FAIL_RATIO = 0.3
 export const TOP_OFFENDER_LIMIT = 3
 
 export const TUI_RENDER_DEBOUNCE_MS = 50
+export const TUI_TOAST_MS = 3000
 export const TUI_PROGRESS_WIDTH = 16
 export const TUI_FALLBACK_COLUMNS = 80
 export const TUI_FALLBACK_ROWS = 24
 export const TUI_FRAME_NON_ROW_LINES = 8
 export const CLI_SEPARATOR_WIDTH = 64
+
+export const CUT_CANDIDATE_DISPLAY_LIMIT = 3
+export const ALREADY_SPLIT_JS_MIN = 3
+export const SHARED_JS_HINT_MIN_BYTES = 14000

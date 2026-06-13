@@ -10,6 +10,8 @@ export const DEFAULT_CONFIG = {
     cut_candidate_min_bytes: 2800,
     baseline_min_delta_bytes: 100,
     overrides: [],
+    ignore: [],
+    ignore_presets: [],
   },
   network: { timeout_ms: 5000, max_redirects: 5 },
   viewport: {
@@ -26,6 +28,10 @@ export const COMPRESSION_LEVEL_MIN = 0
 export const COMPRESSION_LEVEL_MAX = 11
 
 export const STRICT_IPV6_LIMIT_BYTES = 12200
+
+export const IGNORE_PRESETS = {
+  nextjs: { label: 'Next.js client JS', globs: ['_next/static/chunks/**.js'] },
+}
 
 export const SITE_PAGE_BATCH_SIZE = 50
 export const SITE_EMFILE_RETRY_BATCH_SIZE = 10

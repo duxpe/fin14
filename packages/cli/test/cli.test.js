@@ -441,3 +441,54 @@ describe('bin smoke tests', () => {
     assert.ok(stderr.includes('unknown option'))
   })
 })
+
+describe('e2e: Next.js diagnosis + ignore preset', () => {
+  let dir, outDir, tomlPath
+
+  before(async () => {
+    dir = await mkdtemp(join(tmpdir(), 'fin14-next-'))
+    outDir = join(dir, 'out')
+    const chunksDir = join(outDir, '_next', 'static', 'chunks')
+    await mkdir(chunksDir, { recursive: true })
+
+    // Incompressible JS so the gzipped budget clearly exceeds 14 kB.
+    const chunks = ['framework.js', 'main.js', 'webpack.js', 'polyfills.js']
+    for (const name of chunks) {
+      await writeFile(join(chunksDir, name), randomBytes(20000).toString('base64'))
+    }
+    const scripts = chunks.map(n => `<script src="/_next/static/chunks/${n}" defer></script>`).join('')
+    for (const page of ['index.html', 'about.html']) {
+      await writeFile(join(outDir, page), `<!doctype html><html><head>${scripts}</head><body>hi</body></html>`)
+    }
+
+    tomlPath = join(dir, 'fin14.toml')
+    await writeFile(tomlPath, '[budget]\nignore_presets = ["nextjs"]\n')
+  })
+
+  after(async () => { if (dir) await rm(dir, { recursive: true, force: true }) })
+
+  it('honest default: fails, de-noises, names Next.js, gives bundle advice', async () => {
+    const { exitCode, stdout } = await runCli([outDir])
+    assert.equal(exitCode, 1)
+    assert.ok(stdout.includes('Next.js detected'), 'systemic Next.js hint')
+    assert.ok(stdout.includes('large client JS bundle'), 'context-aware JS advice')
+    assert.ok(stdout.includes('… +'), 'cut candidates rolled up')
+  })
+
+  it('ignore preset: pages pass and ignored bytes are shown', async () => {
+    const { exitCode, stdout } = await runCli([outDir, '--config', tomlPath])
+    assert.equal(exitCode, 0)
+    assert.ok(stdout.includes('all pages within budget'))
+    assert.ok(stdout.includes('via nextjs preset'))
+  })
+
+  it('--json exposes ignoredBytes and ignoredResources', async () => {
+    const { exitCode, stdout } = await runCli([outDir, '--config', tomlPath, '--json'])
+    assert.equal(exitCode, 0)
+    const report = JSON.parse(stdout)
+    const page = report.results[0]
+    assert.ok(page.ignoredBytes > 14000)
+    assert.ok(page.ignoredResources.length >= 4)
+    assert.equal(page.status, 'pass')
+  })
+})

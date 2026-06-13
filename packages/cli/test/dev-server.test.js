@@ -206,3 +206,44 @@ test('POST /warnings/toggle — calls onToggleWarning and returns 200', async ()
     pool.close();
   }
 });
+
+test('POST /ignore/toggle — calls onTogglePreset and returns 200', async () => {
+  const pool = createSsePool();
+  let toggledPreset = null;
+  const srv = await startServer(pool, mockState, {
+    onTogglePreset: (preset) => { toggledPreset = preset; },
+  });
+  try {
+    function postIgnore(port, body) {
+      return new Promise((resolve, reject) => {
+        const encoded = JSON.stringify(body);
+        const req = http.request({
+          hostname: '127.0.0.1',
+          port,
+          path: '/ignore/toggle',
+          method: 'POST',
+          agent: false,
+          headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(encoded) },
+        }, (res) => {
+          res.resume();
+          res.on('end', () => resolve(res.statusCode));
+        });
+        req.on('error', reject);
+        req.write(encoded);
+        req.end();
+      });
+    }
+
+    const status = await postIgnore(srv.port, { preset: 'nextjs' });
+    assert.equal(status, 200);
+    assert.equal(toggledPreset, 'nextjs');
+
+    toggledPreset = null;
+    const statusNoPreset = await postIgnore(srv.port, {});
+    assert.equal(statusNoPreset, 200);
+    assert.equal(toggledPreset, null);
+  } finally {
+    await srv.close();
+    pool.close();
+  }
+});

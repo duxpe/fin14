@@ -72,6 +72,32 @@ npm install -D fin14
 }
 ```
 
+A default Next.js app ships its React/framework runtime as shared chunks under
+`_next/static/chunks/*.js` (~190 kB on first load). fin14 counts these honestly,
+so every page reports over budget — this is correct: a client-rendered app does not
+fit in 14 kB. fin14 names the framework and points to the opt-in.
+
+If you have decided that footprint is acceptable, opt in to ignoring the shared
+client JS from the budget (the ignored bytes are always reported, never hidden):
+
+```toml
+# fin14.toml
+[budget]
+ignore_presets = ["nextjs"]   # ignores _next/static/chunks/**.js
+```
+
+Or list asset globs yourself for any framework:
+
+```toml
+[budget]
+ignore = ["_next/static/chunks/**.js"]
+```
+
+In `fin14 dev`, the preset can be toggled live — press `F` (the band
+"⚡ Next.js detected — press F to ignore …" prompts you) or use the
+**Filter Config Panel** in the web report. The toggle is session-only and does not
+write to `fin14.toml`.
+
 ## SvelteKit (`adapter-static`)
 
 ```json

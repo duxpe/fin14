@@ -1,5 +1,5 @@
 import { BYTES_PER_KB, gzipLevelClampNotice } from '@fin14/core'
-import { CLI_SEPARATOR_WIDTH } from '../dev-server/constants.js'
+import { ALREADY_SPLIT_JS_MIN, CLI_SEPARATOR_WIDTH, CUT_CANDIDATE_DISPLAY_LIMIT, SHARED_JS_HINT_MIN_BYTES } from '../dev-server/constants.js'
 
 export function printConfigNotices(config) {
   const notice = gzipLevelClampNotice(config.budget)
@@ -61,10 +61,78 @@ const HINTS = {
   html: 'HTML is large',
 }
 
-export function formatCutCandidate(resource, isTTY, minBytes = 0) {
+const JS_BUNDLE_HINT = 'large client JS bundle; ship less JS or static-render'
+
+function cutHint(resource, jsChunkCount) {
+  if (resource.type === 'js' && jsChunkCount >= ALREADY_SPLIT_JS_MIN) return JS_BUNDLE_HINT
+  return HINTS[resource.type] ?? 'large resource'
+}
+
+export function formatCutCandidate(resource, isTTY, minBytes = 0, jsChunkCount = 0) {
   if (resource.bytes < minBytes) return null
-  const hint = HINTS[resource.type] ?? 'large resource'
-  return '  → ' + resource.displayPath.padEnd(24) + formatBytes(resource.bytes).padEnd(10) + hint
+  return '  → ' + resource.displayPath.padEnd(24) + formatBytes(resource.bytes).padEnd(10) + cutHint(resource, jsChunkCount)
+}
+
+function jsChunkCount(result) {
+  return result.resources.filter(r => r.group === 'js').length
+}
+
+export function formatCutCandidateLines(result, isTTY, minBytes = 0, displayLimit = CUT_CANDIDATE_DISPLAY_LIMIT) {
+  const visible = result.cutCandidates.filter(c => c.bytes >= minBytes)
+  const jsCount = jsChunkCount(result)
+  const lines = visible.slice(0, displayLimit).map(c => formatCutCandidate(c, isTTY, minBytes, jsCount))
+  const rest = visible.slice(displayLimit)
+  if (rest.length > 0) {
+    const restBytes = rest.reduce((s, r) => s + r.bytes, 0)
+    const noun = rest.every(r => r.group === 'js') ? 'chunks' : 'resources'
+    lines.push(dim('  … +' + rest.length + ' more ' + noun + ' (' + formatBytes(restBytes) + ')', isTTY))
+  }
+  return lines
+}
+
+export function formatIgnoredLine(ignoredBytes, source, isTTY) {
+  return '  ' + dim('(' + formatBytes(ignoredBytes) + ' ignored via ' + source + ')', isTTY)
+}
+
+export function detectFramework(summary) {
+  for (const page of summary.results ?? []) {
+    for (const r of page.resources ?? []) {
+      if (typeof r.displayPath === 'string' && r.displayPath.startsWith('_next/')) return 'nextjs'
+    }
+  }
+  return null
+}
+
+function sharedJs(summary) {
+  const pagesByKey = new Map()
+  for (const page of summary.results ?? []) {
+    for (const r of page.resources ?? []) {
+      if (r.group !== 'js') continue
+      const entry = pagesByKey.get(r.key) ?? { bytes: r.bytes, pages: 0 }
+      entry.pages++
+      pagesByKey.set(r.key, entry)
+    }
+  }
+  let bytes = 0
+  for (const entry of pagesByKey.values()) {
+    if (entry.pages >= 2) bytes += entry.bytes
+  }
+  return bytes
+}
+
+export function buildSystemicHint(summary, framework) {
+  const fail = summary.results?.filter(r => r.overBudget).length ?? 0
+  if (fail === 0) return null
+  const sharedBytes = sharedJs(summary)
+  if (sharedBytes < SHARED_JS_HINT_MIN_BYTES) return null
+  const total = summary.pages ?? summary.results.length
+  const size = formatBytes(sharedBytes)
+  if (framework === 'nextjs') {
+    return `Next.js detected — ${fail}/${total} pages ship ~${size} of shared client JS. ` +
+      `The 14 kB budget targets sites that ship little JS; press F in dev to ignore it, or set budget.ignore_presets = ["nextjs"].`
+  }
+  return `${fail}/${total} pages share ~${size} of client JS on first load. ` +
+    `The 14 kB budget targets sites that ship little JS; consider shipping less, or set budget.ignore.`
 }
 
 export function effectiveStatus(page, excluded) {

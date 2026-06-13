@@ -79,6 +79,16 @@ async function handleRequest(req, res, ssePool, opts) {
     return;
   }
 
+  if (req.method === 'POST' && url === '/ignore/toggle') {
+    const body = await readJsonBody(req);
+    if (typeof body.preset === 'string' && opts?.onTogglePreset) {
+      opts.onTogglePreset(body.preset);
+    }
+    res.writeHead(200);
+    res.end();
+    return;
+  }
+
   res.writeHead(404);
   res.end('Not Found');
 }

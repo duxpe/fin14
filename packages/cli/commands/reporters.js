@@ -31,8 +31,10 @@ function jsonResult(page) {
     limitBytes: page.limitBytes,
     overBudget: page.overBudget,
     unknownBudget: page.unknownBudget,
+    ignoredBytes: page.ignoredBytes ?? 0,
     warnings: page.warnings.map(w => ({ code: w.code, message: w.message, strictFailure: w.strictFailure })),
     resources: page.resources.map(jsonResource),
+    ignoredResources: (page.ignoredResources ?? []).map(jsonResource),
     cutCandidates: page.cutCandidates.map(jsonResource),
   }
 }
