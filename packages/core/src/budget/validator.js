@@ -1,17 +1,12 @@
 import { BYTES_PER_KB, STRICT_IPV6_LIMIT_BYTES } from '../constants.js'
 import { resolveBudget } from '../glob.js'
 
-export function validate(results, skipped, warnings, config, file) {
-  const limitBytes = resolveBudget(file, config)
-  const hasOverride = limitBytes !== config.budget.default
-  const totalBytes = results.reduce((sum, r) => sum + r.bytes, 0)
+export function deriveStatusWarnings(results, totalBytes, limitBytes, hasOverride, file) {
   const overBudget = totalBytes > limitBytes
-  const unknownBudget = warnings.some(w => w.code === 'E19')
-
-  const newWarnings = [...warnings]
+  const warnings = []
 
   if (totalBytes > STRICT_IPV6_LIMIT_BYTES && !overBudget && !hasOverride) {
-    newWarnings.push({
+    warnings.push({
       code: 'E13',
       message: `${file}: ${(totalBytes / BYTES_PER_KB).toFixed(1)}kB exceeds IPv6 heuristic (12.2kB)`,
       path: file,
@@ -21,7 +16,7 @@ export function validate(results, skipped, warnings, config, file) {
 
   for (const result of results) {
     if (result.external === true) {
-      newWarnings.push({
+      warnings.push({
         code: 'E14',
         message: `external resource counted: ${result.displayPath}`,
         path: result.path,
@@ -29,6 +24,18 @@ export function validate(results, skipped, warnings, config, file) {
       })
     }
   }
+
+  return warnings
+}
+
+export function validate(results, skipped, warnings, config, file) {
+  const limitBytes = resolveBudget(file, config)
+  const hasOverride = limitBytes !== config.budget.default
+  const totalBytes = results.reduce((sum, r) => sum + r.bytes, 0)
+  const overBudget = totalBytes > limitBytes
+  const unknownBudget = warnings.some(w => w.code === 'E19')
+
+  const newWarnings = [...warnings, ...deriveStatusWarnings(results, totalBytes, limitBytes, hasOverride, file)]
 
   const status = overBudget ? 'fail' : newWarnings.length > 0 ? 'warn' : 'pass'
 
@@ -48,7 +55,7 @@ export function validate(results, skipped, warnings, config, file) {
   }
 }
 
-function computeCutCandidates(results, totalBytes, limitBytes, overBudget) {
+export function computeCutCandidates(results, totalBytes, limitBytes, overBudget) {
   const sorted = [...results].sort((a, b) => b.bytes - a.bytes)
 
   if (overBudget) {

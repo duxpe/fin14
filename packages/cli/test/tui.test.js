@@ -1,7 +1,7 @@
 import { describe, it } from 'node:test'
 import assert from 'node:assert/strict'
 import { createState, pushActivity } from '../dev-server/dev-state.js'
-import { startTui, ACTIONS, buildFrame, visiblePageRows, pageCount, formatPageRow, paintFrame, nextViewFilter, VIEW_FILTERS } from '../dev-server/tui.js'
+import { startTui, ACTIONS, buildFrame, visiblePageRows, pageCount, formatPageRow, paintFrame, nextViewFilter, VIEW_FILTERS, PRESET_ITEMS, filtersItemCount } from '../dev-server/tui.js'
 
 function makeState(overrides = {}) {
   const state = createState('/tmp/dist', {}, false)
@@ -33,6 +33,57 @@ describe('nextViewFilter', () => {
     assert.equal(nextViewFilter('all'), 'violations')
     assert.equal(nextViewFilter('violations'), 'budget')
     assert.equal(nextViewFilter('budget'), 'all')
+  })
+})
+
+describe('ignore presets', () => {
+  function nextSummary() {
+    const results = [{
+      file: 'index.html', status: 'fail', overBudget: true, totalBytes: 80000, limitBytes: 14000,
+      warnings: [], cutCandidates: [],
+      resources: [
+        { key: 'index.html', displayPath: 'index.html', group: 'html', bytes: 5000 },
+        { key: '_next/static/chunks/a.js', displayPath: '_next/static/chunks/a.js', group: 'js', bytes: 75000 },
+      ],
+    }]
+    return { outputDir: 'out', pages: 1, pass: 0, warn: 0, fail: 1, totalBytes: 80000, topAssets: [], siteWarnings: [], results }
+  }
+
+  it('PRESET_ITEMS includes the nextjs preset; filtersItemCount counts presets + warnings', () => {
+    assert.ok(PRESET_ITEMS.some(p => p.id === 'nextjs'))
+    assert.equal(filtersItemCount(), PRESET_ITEMS.length + 10)
+  })
+
+  it('pages screen shows the Next.js band when detected and preset inactive', () => {
+    const s = nextSummary()
+    const state = makeState({ summary: s, rawSummary: s, frameworkDetected: 'nextjs', mode: 'pages' })
+    const frame = buildFrame(state, 80, 24, false).join('\n')
+    assert.ok(frame.includes('Next.js detected'))
+    assert.ok(frame.includes('press F'))
+  })
+
+  it('band hidden once the preset is active', () => {
+    const s = nextSummary()
+    const state = makeState({ summary: s, rawSummary: s, frameworkDetected: 'nextjs', mode: 'pages', activePresets: new Set(['nextjs']) })
+    const frame = buildFrame(state, 80, 24, false).join('\n')
+    assert.ok(!frame.includes('Next.js detected'))
+  })
+
+  it('F screen lists the ignore presets section and warning filters', () => {
+    const s = nextSummary()
+    const state = makeState({ summary: s, rawSummary: s, frameworkDetected: 'nextjs', mode: 'filters', filtersCursor: 0 })
+    const frame = buildFrame(state, 80, 24, false).join('\n')
+    assert.ok(frame.includes('ignore presets'))
+    assert.ok(frame.includes('Next.js client JS'))
+    assert.ok(frame.includes('[ ]'))
+    assert.ok(frame.includes('warning filters'))
+  })
+
+  it('F screen marks active preset with [x]', () => {
+    const s = nextSummary()
+    const state = makeState({ summary: s, rawSummary: s, frameworkDetected: 'nextjs', mode: 'filters', activePresets: new Set(['nextjs']) })
+    const frame = buildFrame(state, 80, 24, false).join('\n')
+    assert.ok(frame.includes('[x]'))
   })
 })
 
@@ -106,19 +157,6 @@ describe('buildFrame', () => {
     assert.ok(lines[1].includes('http://localhost:4214'), `line1: ${lines[1]}`)
   })
 
-  it('line 1 does not contain settle when status is watching', () => {
-    const state = makeState({ status: 'watching' })
-    const lines = buildFrame(state, WIDTH, ROWS, false)
-    assert.ok(!lines[1].includes('settle'), `line1: ${lines[1]}`)
-  })
-
-  it('line 1 contains settle when status is settling', () => {
-    const state = makeState({ status: 'settling', currentSettleMs: 1500 })
-    const lines = buildFrame(state, WIDTH, ROWS, false)
-    assert.ok(lines[1].includes('settle'), `line1: ${lines[1]}`)
-    assert.ok(lines[1].includes('1500ms'), `line1: ${lines[1]}`)
-  })
-
   it('line 2 is a separator of ─ chars', () => {
     const state = makeState()
     const lines = buildFrame(state, WIDTH, ROWS, false)
@@ -167,36 +205,92 @@ describe('buildFrame', () => {
       ],
       pass: 1, warn: 2, fail: 3, pages: 10,
     }
-    for (let i = 0; i < 15; i++) {
-      pushActivity(state, { type: 'info', message: 'a'.repeat(80), ts: i })
-    }
+    pushActivity(state, { type: 'info', message: 'a'.repeat(80), ts: Date.now() })
     const lines = buildFrame(state, 60, ROWS, false)
     for (const line of lines) {
       assert.ok(line.length <= 60, `line too long (${line.length}): ${line}`)
     }
   })
 
-  it('activity messages appear in frame', () => {
+  function passSummary(pages) {
+    return {
+      topAssets: [], pass: pages, warn: 0, fail: 0, pages,
+      results: Array.from({ length: pages }, (_, i) => ({
+        file: `p${i}.html`, totalBytes: 5000, limitBytes: 14000, status: 'pass', resources: [], warnings: [],
+      })),
+    }
+  }
+
+  it('build result shows as a transient band above the footer, without measure counts', () => {
     const state = makeState()
-    pushActivity(state, { type: 'info', message: 'hello world', ts: 1 })
+    state.summary = passSummary(9)
+    pushActivity(state, { type: 'rebuild', message: 'build succeeded (0.3s)', ts: Date.now() })
+    pushActivity(state, { type: 'measure', message: '9 pass  0 warn  0 fail  9 pages', ts: Date.now() })
     const lines = buildFrame(state, WIDTH, ROWS, false)
-    const joined = lines.join('\n')
-    assert.ok(joined.includes('hello world'), `frame missing activity message`)
+    const last = lines.length - 1
+    assert.ok(lines[last].includes('R rebuild'), `footer: ${lines[last]}`)
+    const band = lines[last - 2]
+    assert.ok(band.includes('build succeeded (0.3s)'), `band: ${band}`)
+    assert.ok(!band.includes('pass'), `band leaked measure counts: ${band}`)
+    assert.ok([...lines[last - 1]].every(c => c === '─'), 'separator below band')
+    assert.ok([...lines[last - 3]].every(c => c === '─'), 'separator above band')
   })
 
-  it('activity area shows newest entries', () => {
+  it('shows an info notice (no build_command) in the band', () => {
     const state = makeState()
-    for (let i = 0; i < 20; i++) {
-      pushActivity(state, { type: 'info', message: `msg-${i}`, ts: i })
-    }
-    const maxActivity = ROWS - 10
+    state.summary = passSummary(2)
+    pushActivity(state, { type: 'info', message: 'no build_command configured', ts: Date.now() })
     const lines = buildFrame(state, WIDTH, ROWS, false)
-    const joined = lines.join('\n')
-    const lastMsg = `msg-${19}`
-    assert.ok(joined.includes(lastMsg), `frame missing newest entry: ${lastMsg}`)
-    const shown = state.activity.slice(-maxActivity)
-    const firstShown = shown[0].message
-    assert.ok(joined.includes(firstShown), `frame missing first shown entry: ${firstShown}`)
+    const band = lines[lines.length - 3]
+    assert.ok(band.includes('no build_command configured'), `band: ${band}`)
+  })
+
+  it('a measure on its own (file-watch, no build) shows no band', () => {
+    const state = makeState()
+    state.summary = passSummary(9)
+    pushActivity(state, { type: 'measure', message: '9 pass  0 warn  0 fail  9 pages', ts: Date.now() })
+    const lines = buildFrame(state, WIDTH, ROWS, false)
+    const last = lines.length - 1
+    assert.ok(lines[last].includes('R rebuild'), `footer: ${lines[last]}`)
+    assert.ok([...lines[last - 1]].every(c => c === '─'), 'no band: separator directly above footer')
+  })
+
+  it('stale activity (older than the toast window) is not shown', () => {
+    const state = makeState()
+    state.summary = passSummary(9)
+    pushActivity(state, { type: 'rebuild', message: 'build succeeded (0.0s)', ts: Date.now() - 10000 })
+    const joined = buildFrame(state, WIDTH, ROWS, false).join('\n')
+    assert.ok(!joined.includes('build succeeded'), `frame: ${joined}`)
+  })
+
+  it('detail view shows no activity log', () => {
+    const state = makeState({ mode: 'detail', detailPageFile: 'p0.html' })
+    state.summary = {
+      topAssets: [], pass: 1, warn: 0, fail: 0, pages: 1,
+      results: [{ file: 'p0.html', totalBytes: 6600, limitBytes: 14000, status: 'pass', resources: [{ group: 'html', bytes: 6600 }], warnings: [] }],
+    }
+    pushActivity(state, { type: 'rebuild', message: 'build succeeded (0.0s)', ts: Date.now() })
+    const joined = buildFrame(state, WIDTH, ROWS, false).join('\n')
+    assert.ok(joined.includes('detail: p0.html'), `frame: ${joined}`)
+    assert.ok(!joined.includes('build succeeded'), `detail leaked log: ${joined}`)
+  })
+
+  it('an active burst suppresses the transient band', () => {
+    const state = makeState()
+    state.burst = { active: true, stage: 'measuring', changed: 0, total: 9, done: 9, violations: [] }
+    state.summary = passSummary(9)
+    pushActivity(state, { type: 'rebuild', message: 'build succeeded (0.3s)', ts: Date.now() })
+    const joined = buildFrame(state, WIDTH, ROWS, false).join('\n')
+    assert.ok(!joined.includes('build succeeded'), `band shown during burst: ${joined}`)
+  })
+
+  it('stays within terminal rows when the transient band is active', () => {
+    const state = makeState()
+    state.summary = passSummary(30)
+    pushActivity(state, { type: 'rebuild', message: 'build succeeded (0.3s)', ts: Date.now() })
+    const lines = buildFrame(state, WIDTH, ROWS, false)
+    assert.ok(lines.length <= ROWS, `expected <= ${ROWS} rows, got ${lines.length}`)
+    assert.ok(lines.join('\n').includes('build succeeded (0.3s)'), 'band should be visible')
   })
 
   it('renders page rows when summary has results', () => {

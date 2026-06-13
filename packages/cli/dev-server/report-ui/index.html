@@ -190,6 +190,8 @@
   .warning-filter-msg { color: var(--text-muted); }
   .warning-filter-row.hidden .warning-filter-code { color: var(--text-muted); opacity: 0.5; }
   .warning-filter-row.hidden .warning-filter-msg { opacity: 0.4; }
+  .filter-group-title { font-size: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; margin: 8px 0 2px; }
+  .filter-group-title:first-child { margin-top: 0; }
 </style>
 </head>
 <body>
@@ -219,7 +221,7 @@
   <div id="warnings-toggle-section" class="warnings-toggle">
     <div class="warnings-toggle-header" id="warnings-toggle-header">
       <span class="warnings-toggle-arrow" id="warnings-toggle-arrow">▶</span>
-      <span>Warning Filters</span>
+      <span>Filter Config Panel</span>
     </div>
     <div class="warnings-codes" id="warnings-codes" style="display:none"></div>
   </div>
@@ -275,6 +277,8 @@
 
   let selectedRow = null
   let hiddenWarnings = new Set()
+  let activePresets = new Set()
+  let availablePresets = []
   let lastSummary = null
   let filtersExpanded = false
   let cutCandidateMinBytes = 0
@@ -372,9 +376,44 @@
     })
   }
 
+  async function togglePreset(preset) {
+    await fetch('/ignore/toggle', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ preset }),
+    })
+  }
+
   function renderWarningFilters() {
     warningsCodes.innerHTML = ''
     warningsCodes.style.display = filtersExpanded ? '' : 'none'
+
+    if (availablePresets.length) {
+      const presetTitle = document.createElement('div')
+      presetTitle.className = 'filter-group-title'
+      presetTitle.textContent = 'ignore presets'
+      warningsCodes.appendChild(presetTitle)
+      for (const p of availablePresets) {
+        const isActive = activePresets.has(p.id)
+        const row = document.createElement('label')
+        row.className = 'warning-filter-row' + (isActive ? '' : ' hidden')
+        const cb = document.createElement('input')
+        cb.type = 'checkbox'
+        cb.checked = isActive
+        cb.addEventListener('change', () => togglePreset(p.id))
+        const msgSpan = document.createElement('span')
+        msgSpan.className = 'warning-filter-msg'
+        msgSpan.textContent = p.label
+        row.appendChild(cb)
+        row.appendChild(msgSpan)
+        warningsCodes.appendChild(row)
+      }
+      const warnTitle = document.createElement('div')
+      warnTitle.className = 'filter-group-title'
+      warnTitle.textContent = 'warning filters'
+      warningsCodes.appendChild(warnTitle)
+    }
+
     for (const w of ALL_WARNINGS) {
       const isHidden = hiddenWarnings.has(w.code)
       const row = document.createElement('label')
@@ -399,6 +438,8 @@
   function renderSummary(summary) {
     lastSummary = summary
     hiddenWarnings = new Set(summary.hiddenWarnings ?? [])
+    activePresets = new Set(summary.activePresets ?? [])
+    availablePresets = summary.availablePresets ?? []
     cutCandidateMinBytes = summary.cutCandidateMinBytes ?? 0
 
     rebuildingBadge.style.display = 'none'
@@ -496,6 +537,10 @@
       html += '</div>'
     }
     html += '</div>'
+
+    if (page.ignoredBytes > 0) {
+      html += '<div class="panel-section"><div class="cut-item">' + fmt(page.ignoredBytes) + ' ignored via active preset</div></div>'
+    }
 
     const visiblePageWarnings = (page.warnings || []).filter(w => !hiddenWarnings.has(w.code))
     if (visiblePageWarnings.length) {

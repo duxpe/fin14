@@ -1,5 +1,5 @@
 import { emitKeypressEvents } from 'node:readline'
-import { BYTES_PER_KB } from '@fin14/core'
+import { BYTES_PER_KB, IGNORE_PRESETS, matchGlob } from '@fin14/core'
 import { topOffenders, hintLine } from './dev-state.js'
 import { formatBytes, dim, red, yellow, green } from '../commands/format.js'
 import {
@@ -8,6 +8,7 @@ import {
   TUI_FRAME_NON_ROW_LINES,
   TUI_PROGRESS_WIDTH,
   TUI_RENDER_DEBOUNCE_MS,
+  TUI_TOAST_MS,
 } from './constants.js'
 
 export const ACTIONS = {
@@ -35,6 +36,31 @@ const VIEW_LABELS = {
   all: 'all pages',
   violations: 'violations + warnings',
   budget: 'budget violations only',
+}
+
+export const PRESET_ITEMS = Object.entries(IGNORE_PRESETS).map(([id, p]) => ({ id, label: p.label, globs: p.globs }))
+
+export function filtersItemCount() {
+  return PRESET_ITEMS.length + ALL_WARNINGS.length
+}
+
+function presetBytes(state, globs) {
+  const raw = state.rawSummary
+  if (!raw?.results) return 0
+  const seen = new Map()
+  for (const page of raw.results) {
+    for (const r of page.resources ?? []) {
+      if (globs.some(g => matchGlob(r.displayPath, g))) seen.set(r.key, r.bytes)
+    }
+  }
+  return [...seen.values()].reduce((a, b) => a + b, 0)
+}
+
+function frameworkBandActive(state) {
+  return state.mode === 'pages'
+    && !state.burst?.active
+    && state.frameworkDetected === 'nextjs'
+    && !(state.activePresets ?? new Set()).has('nextjs')
 }
 
 export const ALL_WARNINGS = [
@@ -82,8 +108,30 @@ function trunc(s, w) {
   return s.slice(0, w - 1) + '…'
 }
 
-function pageSlots(rows) {
-  return Math.max(0, rows - TUI_FRAME_NON_ROW_LINES)
+function toastEntries(state) {
+  if (state.mode !== 'pages' || state.burst?.active) return []
+  const cutoff = Date.now() - TUI_TOAST_MS
+  return (state.activity ?? []).filter(e => e.ts >= cutoff && e.type !== 'measure')
+}
+
+function toastActive(state) {
+  return toastEntries(state).length > 0
+}
+
+function frameExtraLines(state) {
+  return (toastActive(state) ? 2 : 0) + (frameworkBandActive(state) ? 1 : 0)
+}
+
+function toastLine(state, useColor) {
+  const icons = { measure: '✓', rebuild: '↺', error: '✗', info: '·' }
+  const entries = toastEntries(state)
+  const text = '  ' + entries.map(e => (icons[e.type] ?? '·') + ' ' + e.message).join(' · ')
+  if (!useColor) return text
+  return entries.some(e => e.type === 'error') ? red(text, true) : dim(text, true)
+}
+
+function pageSlots(rows, extra = 0) {
+  return Math.max(0, rows - TUI_FRAME_NON_ROW_LINES - extra)
 }
 
 function statusRank(status) {
@@ -129,13 +177,13 @@ function allPageRows(state) {
 }
 
 export function pageCount(state, rows) {
-  const slots = pageSlots(rows)
+  const slots = pageSlots(rows, frameExtraLines(state))
   if (slots === 0) return 1
   return Math.max(1, Math.ceil(allPageRows(state).length / slots))
 }
 
 export function visiblePageRows(state, rows) {
-  const slots = pageSlots(rows)
+  const slots = pageSlots(rows, frameExtraLines(state))
   const allRows = allPageRows(state)
   if (state.burst?.active) return allRows.slice(0, slots)
   const page = Math.max(0, Math.min(state.page || 0, pageCount(state, rows) - 1))
@@ -240,9 +288,6 @@ export function buildFrame(state, width, rows, useColor) {
   lines.push(trunc(line0, width))
 
   let line1 = ` report http://localhost:${state.port}`
-  if (state.status === 'settling' || state.status === 'measuring') {
-    line1 += `    settle ${state.currentSettleMs}ms`
-  }
   if (state.summary) {
     line1 += `    view: ${VIEW_LABELS[state.viewFilter ?? 'all']}`
   }
@@ -264,16 +309,33 @@ export function buildFrame(state, width, rows, useColor) {
   const pageRows = visiblePageRows(state, rows)
 
   if (state.mode === 'filters') {
-    lines.push(trunc(' warning filters', width))
     const cursor = state.filtersCursor ?? 0
-    for (let i = 0; i < ALL_WARNINGS.length; i++) {
-      const w = ALL_WARNINGS[i]
+    const active = state.activePresets ?? new Set()
+    let idx = 0
+
+    lines.push(trunc(' ignore presets', width))
+    for (const p of PRESET_ITEMS) {
+      const isActive = active.has(p.id)
+      const box = isActive
+        ? (useColor ? green('[x]', true) : '[x]')
+        : '[ ]'
+      const prefix = idx === cursor ? '>' : ' '
+      const bytes = presetBytes(state, p.globs)
+      const size = bytes > 0 ? `  −${formatBytes(bytes)}` : ''
+      lines.push(trunc(`${prefix} ${box} ${p.label}${size}`, width))
+      idx++
+    }
+
+    lines.push(trunc('─'.repeat(width), width))
+    lines.push(trunc(' warning filters', width))
+    for (const w of ALL_WARNINGS) {
       const isHidden = hidden.has(w.code)
       const dot = isHidden
         ? (useColor ? dim('○', true) : '○')
         : (useColor ? yellow('●', true) : '●')
-      const prefix = i === cursor ? '>' : ' '
+      const prefix = idx === cursor ? '>' : ' '
       lines.push(trunc(`${prefix} ${dot}  ${w.code}  ${w.message}`, width))
+      idx++
     }
     lines.push(trunc('─'.repeat(width), width))
     lines.push(trunc(' Space toggle · ↑↓ navigate · Esc close', width))
@@ -302,24 +364,9 @@ export function buildFrame(state, width, rows, useColor) {
         }
       }
     }
-    const activitySlots = Math.max(0, rows - TUI_FRAME_NON_ROW_LINES - lines.length + 5)
-    const recentActivity = state.activity.slice(-activitySlots)
-    for (const entry of recentActivity) {
-      let line
-      if (entry.type === 'measure') {
-        line = useColor ? green('  ✓  ' + entry.message, true) : '  ✓  ' + entry.message
-      } else if (entry.type === 'rebuild') {
-        line = useColor ? dim('  ↺  ' + entry.message, true) : '  ↺  ' + entry.message
-      } else if (entry.type === 'error') {
-        line = useColor ? red('  ✗  ' + entry.message, true) : '  ✗  ' + entry.message
-      } else {
-        line = useColor ? dim('  ·  ' + entry.message, true) : '  ·  ' + entry.message
-      }
-      lines.push(trunc(line, width))
-    }
   } else {
+    const activitySlots = pageSlots(rows, frameExtraLines(state))
     if (pageRows.length === 0) {
-      const activitySlots = pageSlots(rows)
       if (state.burst?.active) {
         for (let i = 0; i < activitySlots; i++) lines.push('')
         lines.push(trunc('─'.repeat(width), width))
@@ -331,22 +378,7 @@ export function buildFrame(state, width, rows, useColor) {
         lines.push(trunc('  no pages in this view', width))
         for (let i = 1; i < activitySlots; i++) lines.push('')
       } else {
-        const recentActivity = state.activity.slice(-activitySlots)
-        for (let i = 0; i < activitySlots; i++) {
-          const entry = recentActivity[i]
-          if (!entry) { lines.push(''); continue }
-          let line
-          if (entry.type === 'measure') {
-            line = useColor ? green('  ✓  ' + entry.message, true) : '  ✓  ' + entry.message
-          } else if (entry.type === 'rebuild') {
-            line = useColor ? dim('  ↺  ' + entry.message, true) : '  ↺  ' + entry.message
-          } else if (entry.type === 'error') {
-            line = useColor ? red('  ✗  ' + entry.message, true) : '  ✗  ' + entry.message
-          } else {
-            line = useColor ? dim('  ·  ' + entry.message, true) : '  ·  ' + entry.message
-          }
-          lines.push(trunc(line, width))
-        }
+        for (let i = 0; i < activitySlots; i++) lines.push('')
       }
     } else {
       const clampedCursor = Math.max(0, Math.min(state.cursor, pageRows.length - 1))
@@ -362,6 +394,15 @@ export function buildFrame(state, width, rows, useColor) {
   if (state.mode === 'detail') {
     footer = ' Esc close | Q quit | R rebuild'
   } else {
+    if (toastActive(state)) {
+      lines.push(trunc(toastLine(state, useColor), width))
+      lines.push(trunc('─'.repeat(width), width))
+    }
+    if (frameworkBandActive(state)) {
+      const bytes = presetBytes(state, IGNORE_PRESETS.nextjs.globs)
+      const band = ` ⚡ Next.js detected — press F to ignore ${formatBytes(bytes)} shared JS`
+      lines.push(trunc(useColor ? yellow(band, true) : band, width))
+    }
     const pageSeg = pageCount(state, rows) > 1 ? ' ←→ page |' : ''
     footer = ` R rebuild | Q quit | ↑↓ navigate |${pageSeg} Enter detail · F filters · Shift+Tab to switch view`
   }
@@ -391,6 +432,7 @@ export function startTui(state, onAction) {
   process.stdin.resume()
 
   let renderTimer = null
+  let toastTimer = null
 
   function keypressHandler(str, key) {
     if (!key) return
@@ -409,12 +451,23 @@ export function startTui(state, onAction) {
 
   process.stdin.on('keypress', keypressHandler)
 
+  function scheduleToastClear() {
+    clearTimeout(toastTimer)
+    toastTimer = null
+    const entries = toastEntries(state)
+    if (entries.length === 0) return
+    const newest = entries[entries.length - 1]
+    const remaining = newest.ts + TUI_TOAST_MS - Date.now()
+    if (remaining > 0) toastTimer = setTimeout(doRepaint, remaining + 20)
+  }
+
   function doRepaint() {
     const width = process.stdout.columns || TUI_FALLBACK_COLUMNS
     const rows = process.stdout.rows || TUI_FALLBACK_ROWS
     const useColor = process.stdout.hasColors?.() ?? false
     const lines = buildFrame(state, width, rows, useColor)
     paintFrame(process.stdout, lines)
+    scheduleToastClear()
   }
 
   function render() {
@@ -429,6 +482,7 @@ export function startTui(state, onAction) {
 
   function stop() {
     clearTimeout(renderTimer)
+    clearTimeout(toastTimer)
     process.stdin.removeListener('keypress', keypressHandler)
     process.stdin.setRawMode(false)
     process.stdin.pause()

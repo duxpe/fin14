@@ -1,4 +1,4 @@
-import { DEFAULT_CONFIG, loadConfig, measureSite } from '@fin14/core'
+import { DEFAULT_CONFIG, applyIgnoreToSummary, loadConfig, measureSite, resolveIgnoreGlobs } from '@fin14/core'
 import { spawn } from 'node:child_process'
 import { stat } from 'node:fs/promises'
 import { isAbsolute, relative } from 'node:path'
@@ -15,14 +15,25 @@ import {
 import { createSsePool } from '../dev-server/sse.js'
 import { startServer } from '../dev-server/server.js'
 import { createWatcher } from '../dev-server/watcher.js'
-import { startTui, ACTIONS, ALL_WARNINGS, pageCount, visiblePageRows, nextViewFilter } from '../dev-server/tui.js'
+import { startTui, ACTIONS, ALL_WARNINGS, PRESET_ITEMS, filtersItemCount, pageCount, visiblePageRows, nextViewFilter } from '../dev-server/tui.js'
 import { MS_PER_SECOND, TUI_FALLBACK_ROWS } from '../dev-server/constants.js'
-import { printConfigNotices } from './format.js'
+import { printConfigNotices, detectFramework } from './format.js'
+
+function activeIgnoreGlobs(state, config) {
+  return resolveIgnoreGlobs({ ...config, budget: { ...config.budget, ignore_presets: [...state.activePresets] } })
+}
+
+function applyView(state, config) {
+  if (state.rawSummary === null) return
+  state.summary = applyIgnoreToSummary(state.rawSummary, activeIgnoreGlobs(state, config), config)
+}
 
 function summaryPayload(summary, state, config) {
   return {
     ...summary,
     hiddenWarnings: [...state.hiddenWarnings],
+    activePresets: [...state.activePresets],
+    availablePresets: PRESET_ITEMS.map(p => ({ id: p.id, label: p.label })),
     cutCandidateMinBytes: config.budget?.cut_candidate_min_bytes ?? DEFAULT_CONFIG.budget.cut_candidate_min_bytes,
   }
 }
@@ -48,21 +59,17 @@ export async function runDev(parsed) {
 
   const state = createState(outputDir, config, isTTY)
   state.hiddenWarnings = new Set(config.warnings?.exclude ?? [])
+  state.activePresets = new Set(config.budget?.ignore_presets ?? [])
   const pool = createSsePool()
 
   let closeServer
   try {
     const server = await startServer(pool, state, {
       onToggleWarning: (code) => {
-        if (state.hiddenWarnings.has(code)) {
-          state.hiddenWarnings.delete(code)
-        } else {
-          state.hiddenWarnings.add(code)
-        }
-        tui.renderNow()
-        if (state.summary) {
-          pool.broadcast('summary', summaryPayload(state.summary, state, config))
-        }
+        toggleWarning(code)
+      },
+      onTogglePreset: (preset) => {
+        togglePreset(preset)
       },
     })
     state.port = server.port
@@ -105,25 +112,28 @@ export async function runDev(parsed) {
           tui.render()
         },
       } : {})
-      state.summary = summary
+      state.rawSummary = summary
+      state.frameworkDetected = detectFramework(summary)
+      applyView(state, config)
+      const view = state.summary
       state.measureError = null
       if (isBurst) {
         finishBurst(state)
-        const violations = summary.results.filter(page => page.status !== 'pass')
+        const violations = view.results.filter(page => page.status !== 'pass')
         state.viewFilter = violations.length > 0 ? 'violations' : 'all'
         state.page = 0
         state.cursor = 0
       }
       pushActivity(state, {
         type: 'measure',
-        message: summary.pass + ' pass  ' + summary.warn + ' warn  ' + summary.fail + ' fail  ' + summary.pages + ' pages',
+        message: view.pass + ' pass  ' + view.warn + ' warn  ' + view.fail + ' fail  ' + view.pages + ' pages',
         ts: Date.now(),
       })
-      pool.broadcast('summary', summaryPayload(summary, state, config))
+      pool.broadcast('summary', summaryPayload(view, state, config))
       if (!isTTY) {
         process.stdout.write(
-          'pass ' + summary.pass + '  warn ' + summary.warn +
-          '  fail ' + summary.fail + '  ' + summary.pages + ' pages\n'
+          'pass ' + view.pass + '  warn ' + view.warn +
+          '  fail ' + view.fail + '  ' + view.pages + ' pages\n'
         )
       }
     } catch (err) {
@@ -197,6 +207,25 @@ export async function runDev(parsed) {
     }
   }
 
+  function broadcastSummary() {
+    if (state.summary) pool.broadcast('summary', summaryPayload(state.summary, state, config))
+  }
+
+  function toggleWarning(code) {
+    if (state.hiddenWarnings.has(code)) state.hiddenWarnings.delete(code)
+    else state.hiddenWarnings.add(code)
+    tui.renderNow()
+    broadcastSummary()
+  }
+
+  function togglePreset(preset) {
+    if (state.activePresets.has(preset)) state.activePresets.delete(preset)
+    else state.activePresets.add(preset)
+    applyView(state, config)
+    tui.renderNow()
+    broadcastSummary()
+  }
+
   function handleAction(action) {
     if (action === ACTIONS.QUIT) { shutdown(); return }
     if (action === ACTIONS.REBUILD) { handleRebuild(); return }
@@ -222,15 +251,12 @@ export async function runDev(parsed) {
     }
     if (action === ACTIONS.SPACE) {
       if (state.mode === 'filters') {
-        const item = ALL_WARNINGS[state.filtersCursor]
-        if (item) {
-          const code = item.code
-          if (state.hiddenWarnings.has(code)) state.hiddenWarnings.delete(code)
-          else state.hiddenWarnings.add(code)
-          tui.renderNow()
-          if (state.summary) {
-            pool.broadcast('summary', summaryPayload(state.summary, state, config))
-          }
+        const cur = state.filtersCursor ?? 0
+        if (cur < PRESET_ITEMS.length) {
+          togglePreset(PRESET_ITEMS[cur].id)
+        } else {
+          const w = ALL_WARNINGS[cur - PRESET_ITEMS.length]
+          if (w) toggleWarning(w.code)
         }
       }
       return
@@ -250,7 +276,7 @@ export async function runDev(parsed) {
     }
     if (action === ACTIONS.DOWN) {
       if (state.mode === 'filters') {
-        state.filtersCursor = Math.min(ALL_WARNINGS.length - 1, state.filtersCursor + 1)
+        state.filtersCursor = Math.min(filtersItemCount() - 1, state.filtersCursor + 1)
         tui.renderNow()
         return
       }

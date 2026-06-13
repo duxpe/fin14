@@ -17,6 +17,9 @@ export function createState(outputDir, config, isTTY) {
     port: 0,
     status: 'starting',
     summary: null,
+    rawSummary: null,
+    activePresets: new Set(),
+    frameworkDetected: null,
     measuring: false,
     measureError: null,
     rebuilding: false,
@@ -103,7 +106,10 @@ export function hintLine(state) {
   if (state.summary === null) return '';
   const { fail, warn, pages, topAssets } = state.summary;
   if (fail === 0 && warn === 0) return 'all pages within budget';
-  if (fail > 0 && fail / pages >= SYSTEMIC_FAIL_RATIO) return 'many pages over budget — check shared template or global CSS';
+  if (fail > 0 && fail / pages >= SYSTEMIC_FAIL_RATIO) {
+    if (state.frameworkDetected === 'nextjs') return 'many pages over budget — Next.js client JS (press F to ignore)';
+    return 'many pages over budget — check shared template or global CSS';
+  }
   if (fail > 0) {
     const top = topAssets?.[0];
     return `${fail} page${fail !== 1 ? 's' : ''} over budget${top ? ` — ${top.displayPath} is heaviest` : ''}`;

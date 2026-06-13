@@ -1,6 +1,6 @@
 import { readFile, access } from 'node:fs/promises'
 import { parse } from 'smol-toml'
-import { BYTES_PER_KB, COMPRESSION_LEVEL_MAX, COMPRESSION_LEVEL_MIN, DEFAULT_CONFIG } from './constants.js'
+import { BYTES_PER_KB, COMPRESSION_LEVEL_MAX, COMPRESSION_LEVEL_MIN, DEFAULT_CONFIG, IGNORE_PRESETS } from './constants.js'
 
 const SSG_DETECTORS = [
   { files: ['hugo.toml', 'hugo.yaml', 'hugo.json'],                                                dir: 'public' },
@@ -21,7 +21,7 @@ async function detectOutputDir(cwd) {
 
 const KNOWN_KEYS = {
   project:  new Set(['output_dir', 'build_command', 'include', 'exclude']),
-  budget:   new Set(['default', 'compression', 'compression_level', 'cut_candidate_min_bytes', 'baseline_min_delta_bytes', 'overrides']),
+  budget:   new Set(['default', 'compression', 'compression_level', 'cut_candidate_min_bytes', 'baseline_min_delta_bytes', 'overrides', 'ignore', 'ignore_presets']),
   network:  new Set(['timeout_ms', 'max_redirects']),
   viewport: new Set(['default', 'mobile', 'desktop']),
   warnings: new Set(['exclude']),
@@ -118,7 +118,7 @@ function validateViewportPreset(preset, name, userPreset) {
 function mergeConfig(user) {
   const result = {
     project:  { ...DEFAULT_CONFIG.project, include: [...DEFAULT_CONFIG.project.include], exclude: [...DEFAULT_CONFIG.project.exclude] },
-    budget:   { ...DEFAULT_CONFIG.budget, overrides: [...DEFAULT_CONFIG.budget.overrides] },
+    budget:   { ...DEFAULT_CONFIG.budget, overrides: [...DEFAULT_CONFIG.budget.overrides], ignore: [...DEFAULT_CONFIG.budget.ignore], ignore_presets: [...DEFAULT_CONFIG.budget.ignore_presets] },
     network:  { ...DEFAULT_CONFIG.network },
     viewport: {
       default: DEFAULT_CONFIG.viewport.default,
@@ -193,6 +193,18 @@ function mergeConfig(user) {
     }
     if (user.budget.overrides !== undefined) {
       result.budget.overrides = parseBudgetOverrides(user.budget.overrides)
+    }
+    if (user.budget.ignore !== undefined) {
+      result.budget.ignore = validateGlobList(user.budget.ignore, 'budget.ignore')
+    }
+    if (user.budget.ignore_presets !== undefined) {
+      const presets = validateGlobList(user.budget.ignore_presets, 'budget.ignore_presets')
+      for (const name of presets) {
+        if (!IGNORE_PRESETS[name]) {
+          throw new Error(`E04: fin14.toml: unknown budget.ignore_presets value '${name}' (known: ${Object.keys(IGNORE_PRESETS).join(', ')})`)
+        }
+      }
+      result.budget.ignore_presets = presets
     }
   }
 

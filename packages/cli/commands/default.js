@@ -1,7 +1,7 @@
-import { BYTES_PER_KB, DEFAULT_CONFIG, loadConfig, measureSite } from '@fin14/core'
+import { BYTES_PER_KB, DEFAULT_CONFIG, applyIgnoreToSummary, loadConfig, measureSite, resolveIgnoreGlobs } from '@fin14/core'
 import { spawn } from 'node:child_process'
 import { stat, readFile } from 'node:fs/promises'
-import { formatBytes, statusSymbol, formatWarning, formatCutCandidate, pageGroupSummary, green, effectiveStatus, recount, printConfigNotices } from './format.js'
+import { formatBytes, statusSymbol, formatWarning, formatCutCandidateLines, formatIgnoredLine, buildSystemicHint, detectFramework, pageGroupSummary, dim, green, effectiveStatus, recount, printConfigNotices } from './format.js'
 import { toJsonReport, githubAnnotations, diffBaseline, formatBaselineDiff } from './reporters.js'
 
 async function loadBaselineDiff(path, summary, minDeltaBytes) {
@@ -26,6 +26,12 @@ function resolveBaselineMinDelta(parsed, config) {
     return n
   }
   return config.budget.baseline_min_delta_bytes
+}
+
+function ignoreSourceLabel(config) {
+  const presets = config.budget?.ignore_presets ?? []
+  if (presets.length > 0) return presets.join(', ') + ' preset' + (presets.length > 1 ? 's' : '')
+  return 'budget.ignore'
 }
 
 async function runBuild(command) {
@@ -105,6 +111,8 @@ export async function runDefault(parsed) {
     process.exit(2)
   }
 
+  summary = applyIgnoreToSummary(summary, resolveIgnoreGlobs(config), config)
+
   let baselineDiff = null
   if (parsed.flags.baseline) {
     const minDeltaBytes = resolveBaselineMinDelta(parsed, config)
@@ -162,9 +170,11 @@ export async function runDefault(parsed) {
     )
     const groups = pageGroupSummary(result)
     if (groups) process.stdout.write('     ' + groups + '\n')
-    for (const c of result.cutCandidates) {
-      const line = formatCutCandidate(c, isTTY, minBytes)
-      if (line !== null) process.stdout.write(line + '\n')
+    if (result.ignoredBytes > 0) {
+      process.stdout.write(formatIgnoredLine(result.ignoredBytes, ignoreSourceLabel(config), isTTY) + '\n')
+    }
+    for (const line of formatCutCandidateLines(result, isTTY, minBytes)) {
+      process.stdout.write(line + '\n')
     }
     for (const w of visibleWarnings) {
       process.stdout.write(formatWarning(w, isTTY) + '\n')
@@ -175,6 +185,23 @@ export async function runDefault(parsed) {
     process.stdout.write('  ' + green('✓', isTTY) + '  all pages within budget\n')
   }
 
+  const ignoredAssets = new Map()
+  for (const r of summary.results) {
+    for (const ig of r.ignoredResources ?? []) ignoredAssets.set(ig.key, ig.bytes)
+  }
+  if (ignoredAssets.size > 0) {
+    const uniqueIgnored = [...ignoredAssets.values()].reduce((a, b) => a + b, 0)
+    process.stdout.write(
+      '  ' + dim('ignored ' + formatBytes(uniqueIgnored) + ' via ' + ignoreSourceLabel(config) +
+      ' (' + ignoredAssets.size + ' asset' + (ignoredAssets.size === 1 ? '' : 's') + ')', isTTY) + '\n'
+    )
+  }
+
+  const systemicHint = buildSystemicHint(summary, detectFramework(summary))
+  if (systemicHint) {
+    process.stdout.write('\n  ' + dim('hint  ' + systemicHint, isTTY) + '\n')
+  }
+
   if (parsed.flags.verbose) {
     for (const result of summary.results) {
       if (result.status !== 'pass') continue
@@ -183,6 +210,9 @@ export async function runDefault(parsed) {
       )
       const groups = pageGroupSummary(result)
       if (groups) process.stdout.write('     ' + groups + '\n')
+      if (result.ignoredBytes > 0) {
+        process.stdout.write(formatIgnoredLine(result.ignoredBytes, ignoreSourceLabel(config), isTTY) + '\n')
+      }
     }
   }
 

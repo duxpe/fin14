@@ -54,6 +54,25 @@ describe('toJsonReport', () => {
     const report = toJsonReport(makeSummary(), { pages: [], added: [], removed: [] })
     assert.deepEqual(report.baseline, { pages: [], added: [], removed: [] })
   })
+
+  it('defaults ignore fields to 0 / [] when absent', () => {
+    const report = toJsonReport(makeSummary())
+    assert.equal(report.results[0].ignoredBytes, 0)
+    assert.deepEqual(report.results[0].ignoredResources, [])
+  })
+
+  it('serializes ignoredBytes and ignoredResources when present', () => {
+    const summary = makeSummary()
+    summary.results[0].ignoredBytes = 195800
+    summary.results[0].ignoredResources = [
+      { key: '/abs/_next/chunks/a.js', path: '/abs/_next/chunks/a.js', group: 'js', type: 'js', displayPath: '_next/static/chunks/a.js', bytes: 195800, external: false, inline: false },
+    ]
+    const report = toJsonReport(summary)
+    assert.equal(report.results[0].ignoredBytes, 195800)
+    assert.equal(report.results[0].ignoredResources.length, 1)
+    assert.equal(report.results[0].ignoredResources[0].displayPath, '_next/static/chunks/a.js')
+    assert.equal(report.results[0].ignoredResources[0].key, undefined)
+  })
 })
 
 describe('githubAnnotations', () => {

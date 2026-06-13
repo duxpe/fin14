@@ -1,9 +1,15 @@
-import { BYTES_PER_KB, DEFAULT_CONFIG, loadConfig, measurePage, measureSite } from '@fin14/core'
+import { BYTES_PER_KB, DEFAULT_CONFIG, applyIgnoreToPage, applyIgnoreToSummary, loadConfig, measurePage, measureSite, resolveIgnoreGlobs } from '@fin14/core'
 import { resolve, dirname } from 'node:path'
 import { stat } from 'node:fs/promises'
-import { formatBytes, statusSymbol, separator, formatWarning, formatCutCandidate, formatGroupLine, effectiveStatus, recount, printConfigNotices } from './format.js'
+import { formatBytes, statusSymbol, separator, formatWarning, formatCutCandidateLines, formatIgnoredLine, formatGroupLine, effectiveStatus, recount, printConfigNotices } from './format.js'
 
-function printAuditBlock(result, isTTY, excluded = new Set(), minBytes = 0) {
+function ignoreSourceLabel(config) {
+  const presets = config.budget?.ignore_presets ?? []
+  if (presets.length > 0) return presets.join(', ') + ' preset' + (presets.length > 1 ? 's' : '')
+  return 'budget.ignore'
+}
+
+function printAuditBlock(result, isTTY, excluded = new Set(), minBytes = 0, config = {}) {
   const out = process.stdout.write.bind(process.stdout)
   const sep = separator() + '\n'
 
@@ -17,6 +23,9 @@ function printAuditBlock(result, isTTY, excluded = new Set(), minBytes = 0) {
     ? '   +' + ((result.totalBytes - result.limitBytes) / BYTES_PER_KB).toFixed(1) + ' kB'
     : ''
   out('  total    ' + tKb + ' / ' + lKb + ' kB   ' + sym + over + '\n')
+  if (result.ignoredBytes > 0) {
+    out(formatIgnoredLine(result.ignoredBytes, ignoreSourceLabel(config), isTTY) + '\n')
+  }
 
   out(sep)
 
@@ -31,7 +40,7 @@ function printAuditBlock(result, isTTY, excluded = new Set(), minBytes = 0) {
 
   out(sep)
 
-  const visibleCuts = result.cutCandidates.map(c => formatCutCandidate(c, isTTY, minBytes)).filter(l => l !== null)
+  const visibleCuts = formatCutCandidateLines(result, isTTY, minBytes)
   if (visibleCuts.length > 0) {
     out('  cut candidates\n')
     for (const line of visibleCuts) {
@@ -91,9 +100,10 @@ export async function runAudit(parsed) {
     const excluded = new Set(config.warnings?.exclude ?? [])
     const minBytes = config.budget?.cut_candidate_min_bytes ?? DEFAULT_CONFIG.budget.cut_candidate_min_bytes
 
-    const result = await measurePage(absPath, config)
+    const measured = await measurePage(absPath, config)
+    const result = applyIgnoreToPage(measured, resolveIgnoreGlobs(config), config)
 
-    printAuditBlock(result, isTTY, excluded, minBytes)
+    printAuditBlock(result, isTTY, excluded, minBytes, config)
 
     if (result.overBudget && !parsed.flags.force) {
       process.stdout.write('\n  Use --force to ignore budget failures.\n')
@@ -143,9 +153,11 @@ export async function runAudit(parsed) {
     process.exit(2)
   }
 
+  summary = applyIgnoreToSummary(summary, resolveIgnoreGlobs(config), config)
+
   for (let i = 0; i < summary.results.length; i++) {
     if (i > 0) process.stdout.write('\n')
-    printAuditBlock(summary.results[i], isTTY, excluded, minBytes)
+    printAuditBlock(summary.results[i], isTTY, excluded, minBytes, config)
   }
 
   const counts = recount(summary.results, excluded)
