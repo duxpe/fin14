@@ -2,6 +2,7 @@ import http from 'node:http';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { gzipSync } from 'node:zlib';
 import { DEV_HOST, DEV_PORT_END, DEV_PORT_START } from './constants.js';
 
 const reportUiDir = fileURLToPath(new URL('../dev-server/report-ui/', import.meta.url));
@@ -16,7 +17,7 @@ function tryListen(server, port) {
   });
 }
 
-async function serveHtml(res, filePath) {
+async function serveHtml(req, res, filePath) {
   const resolved = path.resolve(filePath);
   if (!resolved.startsWith(path.resolve(reportUiDir))) {
     res.writeHead(403);
@@ -31,11 +32,18 @@ async function serveHtml(res, filePath) {
     res.end('Internal Server Error');
     return;
   }
-  res.writeHead(200, {
+  const headers = {
     'Content-Type': 'text/html; charset=utf-8',
     'Cache-Control': 'no-store',
-  });
-  res.end(body);
+  };
+  let payload = body;
+  if (/\bgzip\b/.test(req.headers['accept-encoding'] || '')) {
+    payload = gzipSync(body);
+    headers['Content-Encoding'] = 'gzip';
+    headers['Vary'] = 'Accept-Encoding';
+  }
+  res.writeHead(200, headers);
+  res.end(payload);
 }
 
 function readJsonBody(req) {
@@ -65,7 +73,7 @@ async function handleRequest(req, res, ssePool, opts) {
 
   if (req.method === 'GET' && (url === '/' || url === '/index.html')) {
     const file = path.join(reportUiDir, 'index.html');
-    await serveHtml(res, file);
+    await serveHtml(req, res, file);
     return;
   }
 
