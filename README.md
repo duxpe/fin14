@@ -5,7 +5,7 @@
 <p align="center">14 kB budget linter for static sites</p>
 
 <p align="center">
-  <a href="https://www.npmjs.com/package/fin14"><img src="https://img.shields.io/npm/v/fin14.svg" alt="npm version" /></a>
+  <a href="https://www.npmjs.com/package/@fin14/cli"><img src="https://img.shields.io/npm/v/@fin14/cli.svg" alt="npm version" /></a>
   <a href="./LICENSE"><img src="https://img.shields.io/badge/license-MIT-blue.svg" alt="license" /></a>
 </p>
 
@@ -25,13 +25,13 @@ fin14 is a page weight linter for static sites. It has a TUI, Web Report and CI 
 ## Install
 
 ```bash
-npm install -D fin14
+npm install -D @fin14/cli
 ```
 
 Or try it immediately — fin14 auto-detects your SSG output dir:
 
 ```bash
-npx fin14
+npx @fin14/cli
 ```
 
 ## See it work
@@ -92,7 +92,7 @@ Pass an explicit path to override detection: `fin14 dev public/`.
 - name: Build
   run: npm run build
 - name: Check page budget
-  run: npx fin14 --strict
+  run: npx @fin14/cli --strict
 ```
 
 `--strict` also fails on external CDN resources counted in the budget and pages above 12.2 kB (the IPv6 MTU heuristic: 10 × (1280 − 40 − 20) bytes).

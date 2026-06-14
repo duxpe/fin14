@@ -5,13 +5,13 @@ Performance budget linter for static sites. Measures the gzip-compressed page we
 ## Install
 
 ```bash
-npm install -D fin14
+npm install -D @fin14/cli
 ```
 
 Or run without installing:
 
 ```bash
-npx fin14 dist/
+npx @fin14/cli dist/
 ```
 
 ## Why 14 kB
@@ -336,7 +336,7 @@ jobs:
         run: npm run build
 
       - name: Check page weight
-        run: npx fin14 --strict dist/
+        run: npx @fin14/cli --strict dist/
 ```
 
 With `--strict`, CI fails when any page (a) counts an external CDN resource toward the budget, (b) exceeds 12.2 kB (the IPv6 MTU heuristic), or (c) has an unknown budget because an external fetch failed. This catches regressions like a Google Fonts `<link>` quietly slipping into a page.

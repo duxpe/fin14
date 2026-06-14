@@ -1,6 +1,6 @@
 # @fin14/core
 
-Measurement engine for the [fin14](https://www.npmjs.com/package/fin14) performance budget CLI. Loads config, measures gzip-compressed page weight against the 14 kB limit, and summarizes results across a static site.
+Measurement engine for the [fin14](https://www.npmjs.com/package/@fin14/cli) performance budget CLI. Loads config, measures gzip-compressed page weight against the 14 kB limit, and summarizes results across a static site.
 
 Use this package to integrate fin14 measurement into your own build scripts, CI pipelines, or framework tooling. If you just want a CLI, install `fin14` directly.
 
@@ -192,6 +192,6 @@ import { matchGlob, filterPages, resolveBudget } from '@fin14/core';
 
 ---
 
-For the CLI, see [fin14](https://www.npmjs.com/package/fin14).
+For the CLI, see [fin14](https://www.npmjs.com/package/@fin14/cli).
 
 MIT
