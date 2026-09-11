@@ -17,6 +17,6 @@
   "dependencies": {
     "parse5": "^8.0.1",
     "css-tree": "^3.2.1",
-    "smol-toml": "^1.6.1"
+    "smol-toml": "^1.8.0"
   }
 }
